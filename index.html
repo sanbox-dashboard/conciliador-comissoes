@@ -73,7 +73,7 @@
     </div>
     <div class="tabs hidden" id="canalTabs" style="margin-top:12px"></div>
     <div class="tbl hidden" id="regrasBox" style="max-height:240px"><table id="regrasTbl"></table></div>
-    <div class="rules">Configuração (uma vez só): <b>Google Sheets</b> → Compartilhar → Acesso geral: "Qualquer pessoa com o link" (Leitor) → Copiar link · <b>OneDrive</b> → botão direito no arquivo → Compartilhar → "Qualquer pessoa com o link pode exibir" → Copiar link. As abas da planilha precisam se chamar <b>Amazon</b>, <b>Casas Bahia</b> e <b>Magazine Luiza</b> (colunas SKU | Comissão | Inicio | Fim). O app relê a planilha toda vez que é aberto. <span style="color:#999">Sem link? <a href="#" onclick="document.getElementById('fCom').click();return false">carregar o arquivo manualmente</a>.</span><input type="file" id="fCom" accept=".xlsx,.xls"></div>
+    <div class="rules">Configuração (uma vez só): <b>Google Sheets</b> → Compartilhar → Acesso geral: "Qualquer pessoa com o link" (Leitor) → Copiar link · <b>OneDrive</b> → botão direito no arquivo → Compartilhar → "Qualquer pessoa com o link pode exibir" → Copiar link. As abas da planilha precisam se chamar <b>Amazon</b>, <b>Casas Bahia</b> e <b>Magazine Luiza</b> (colunas SKU | Comissão | Inicio | Fim). Para o Casas Bahia, a aba <b>Pedidos Casas Bahia</b> (colunas DATA | Pedido | SKU) traduz o nº do pedido do repasse no seu SKU real. O app relê a planilha toda vez que é aberto. <span style="color:#999">Sem link? <a href="#" onclick="document.getElementById('fCom').click();return false">carregar o arquivo manualmente</a>.</span><input type="file" id="fCom" accept=".xlsx,.xls"></div>
     <div class="msg" id="msgCom"></div>
   </div>
 
@@ -122,6 +122,9 @@ const TOL = 0.01;
 const CANAIS = ['Amazon', 'Casas Bahia', 'Magazine Luiza'];
 const ALIAS = { 'Magazine Luiza': ['magalu'], 'Casas Bahia': ['via varejo', 'viavarejo', 'casasbahia'] };
 const EMBED = /*__CFG_START__*/{"link":"https://docs.google.com/spreadsheets/d/1bDkFVZLH2vDDWEgmEtdcEKyyKbn5_S94MVpf2e5HTJc/edit"}/*__CFG_END__*/;
+const MAP_TAB_CB = 'Pedidos Casas Bahia';   // aba de-para: DATA | Pedido | SKU
+let MAP_CB = {};                            // { pedido normalizado -> SKU real }
+const normPed = v => String(v == null ? '' : v).trim().replace(/\.0+$/, '');
 
 // ---------- núcleo de cálculo ----------
 function truncPct(x){ return Math.floor(x * 10000) / 100; }
@@ -271,6 +274,28 @@ function regrasDeGviz(resp){
   }
   return lista;
 }
+function mapaDeGviz(resp){
+  const m = {}; const rows = (resp.table && resp.table.rows) || [];
+  for (const row of rows){
+    const c = row.c || [];
+    const ped = c[1] && c[1].v != null ? normPed(c[1].v) : '';
+    const sku = c[2] && c[2].v != null ? String(c[2].v).trim() : '';
+    if (!ped || !sku || ped.toLowerCase() === 'pedido') continue;
+    m[ped] = sku;
+  }
+  return m;
+}
+function mapaDeWb(wb){
+  const m = {}; const n = wb.SheetNames.find(s => s.toLowerCase().includes('pedido'));
+  if (!n) return m;
+  XLSX.utils.sheet_to_json(wb.Sheets[n], { header:1, defval:null }).forEach(r => {
+    if (!r) return;
+    const ped = normPed(r[1]); const sku = r[2] != null ? String(r[2]).trim() : '';
+    if (!ped || !sku || ped.toLowerCase() === 'pedido') return;
+    m[ped] = sku;
+  });
+  return m;
+}
 async function carregarGoogle(id){
   const map = {}; CANAIS.forEach(c => map[c] = []);
   const fp = lista => JSON.stringify(lista.map(g => [g.sku, g.com, +g.ini, +g.fim]));
@@ -294,6 +319,7 @@ async function carregarGoogle(id){
   if (!CANAIS.some(c => map[c].length)){
     throw new Error('não consegui ler a planilha. Verifique: (1) internet; (2) Compartilhar → "Qualquer pessoa com o link" → Leitor; (3) colunas SKU | Comissão | Inicio | Fim. Para vários canais, nomeie as abas Amazon, Casas Bahia e Magazine Luiza.');
   }
+  try { const rm = await gvizTab(id, MAP_TAB_CB); if (rm.status === 'ok'){ const mm = mapaDeGviz(rm); if (Object.keys(mm).length) MAP_CB = mm; } } catch(e){}
   return map;
 }
 
@@ -325,14 +351,15 @@ async function conectar(manual){
   }
 }
 
-function aplicarRegras(wb, origem){ aplicarRegrasMap(extrairRegrasXlsx(wb), origem); }
+function aplicarRegras(wb, origem){ MAP_CB = mapaDeWb(wb); aplicarRegrasMap(extrairRegrasXlsx(wb), origem); }
 
 function aplicarRegrasMap(map, origem){
   RULES = map;
   const tot = CANAIS.map(c => `${c}: ${RULES[c].length}`).join(' · ');
   document.getElementById('linkRow').classList.add('hidden');
   document.getElementById('statusRow').classList.remove('hidden');
-  document.getElementById('statusTxt').textContent = `${tot} SKU(s) — lida às ${new Date().toLocaleTimeString('pt-BR').slice(0,5)} da ${origem}`;
+  const nMap = Object.keys(MAP_CB).length;
+  document.getElementById('statusTxt').textContent = `${tot} SKU(s)${nMap ? ` · Mapa Casas Bahia: ${nMap} pedidos` : ''} — lida às ${new Date().toLocaleTimeString('pt-BR').slice(0,5)} da ${origem}`;
   document.getElementById('canalTabs').classList.remove('hidden');
   document.getElementById('regrasBox').classList.remove('hidden');
   renderRegras(CANAIS.find(c => RULES[c].length) || CANAIS[0]);
@@ -403,7 +430,12 @@ function rodar(){
   const canal = canalDetectado;
   const rules = RULES[canal] || [];
   if (!rules.length){ setMsg('msg','err',`A aba "${canal}" da planilha online não tem SKUs cadastrados.`); return; }
-  res = conciliar(repRows.filter(r => r.canal === canal), rules);
+  let linhas = repRows.filter(r => r.canal === canal);
+  if (canal === 'Casas Bahia'){
+    if (!Object.keys(MAP_CB).length){ setMsg('msg','err','Não consegui carregar a aba "Pedidos Casas Bahia" da planilha online. Reconecte no item 1 (🔄 Atualizar agora) e tente de novo.'); return; }
+    linhas = linhas.map(r => { const real = MAP_CB[normPed(r.pedido)]; return real ? { ...r, sku: real, skuMkt: r.sku } : r; });
+  }
+  res = conciliar(linhas, rules);
   res.canal = canal;
   document.getElementById('kTotal').textContent = res.total;
   document.getElementById('kOk').textContent = res.ok.length;
