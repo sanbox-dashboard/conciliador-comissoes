@@ -90,7 +90,7 @@
       <select id="canalSel" class="hidden"></select>
       <button id="btnRun" onclick="rodar()">Conciliar</button>
     </div>
-    <div class="rules">Regras: % cobrado = |Comissão| ÷ (Valor bruto − |Campanhas|), truncado na 2ª casa decimal · período pela <b>Data do pedido</b> · tolerância de 0,01 p.p. · valor bruto ≤ 0 ou comissão zerada = devolução/estorno (não avaliado).</div>
+    <div class="rules">Regras: Amazon/Magalu (Koncili) → % cobrado = |Comissão| ÷ (Valor bruto − |Campanhas|), truncado na 2ª casa · <b>Casas Bahia</b> (repasse nativo Via) → usa a coluna <b>Comissão Aplicada %</b> direto e o <b>SKU Lojista</b> · período pela <b>Data do pedido</b> · tolerância de 0,01 p.p. · quando <b>% cobrado &lt; negociado</b> vai para a aba "Cobrado a menos"; a principal mostra só <b>cobrado a mais</b>.</div>
     <div class="msg" id="msg"></div>
   </div>
 
@@ -98,13 +98,15 @@
     <div class="cards">
       <div class="kpi"><div class="v" id="kTotal">0</div><div class="l">Pedidos no período</div></div>
       <div class="kpi green"><div class="v" id="kOk">0</div><div class="l">Conformes</div></div>
-      <div class="kpi red"><div class="v" id="kDiv">0</div><div class="l">Divergentes</div></div>
+      <div class="kpi red"><div class="v" id="kMais">0</div><div class="l">Cobrado a mais</div></div>
+      <div class="kpi"><div class="v" id="kMenos">0</div><div class="l">Cobrado a menos</div></div>
       <div class="kpi"><div class="v" id="kDev">0</div><div class="l">Devoluções/estornos</div></div>
-      <div class="kpi red"><div class="v" id="kImp">R$ 0</div><div class="l">Cobrado a mais</div></div>
+      <div class="kpi red"><div class="v" id="kImp">R$ 0</div><div class="l">Total cobrado a mais</div></div>
     </div>
     <div class="card">
       <div class="tabs">
-        <div class="tab on" id="tabD" onclick="verAba('D')">Divergências</div>
+        <div class="tab on" id="tabM" onclick="verAba('M')">Cobrado a mais</div>
+        <div class="tab" id="tabm" onclick="verAba('m')">Cobrado a menos</div>
         <div class="tab" id="tabV" onclick="verAba('V')">Devoluções/Estornos</div>
       </div>
       <div class="tbl"><table id="tabela"></table></div>
@@ -130,20 +132,24 @@ const normPed = v => String(v == null ? '' : v).trim().replace(/\.0+$/, '');
 function truncPct(x){ return Math.floor(x * 10000) / 100; }
 
 function conciliar(rows, rules){
-  const ok = [], div = [], dev = [];
+  const ok = [], mais = [], menos = [], dev = [];
   rows.forEach(r => {
     const regra = rules.find(g => g.sku === r.sku && r.data >= g.ini && r.data <= g.fim);
     if (!regra) return;
-    const base = r.bruto - Math.abs(r.camp);
-    const q = Math.abs(r.com);
-    const linha = { ...r, camp: -Math.abs(r.camp), com: q, base: base, neg: regra.com };
-    if (r.bruto <= 0 || base <= 0 || q === 0) { dev.push(linha); return; }
-    const p = truncPct(q / base);
+    const base = (r.base != null) ? r.base : (r.bruto - Math.abs(r.camp || 0));
+    const q = (r.comRS != null) ? Math.abs(r.comRS) : Math.abs(r.com);
+    const negPct = regra.com * 100;
+    const linha = { ...r, camp: -Math.abs(r.camp || 0), com: q, base: base, bruto: (r.bruto != null ? r.bruto : base), neg: regra.com };
+    if (r.devFlag || base <= 0 || q === 0) { dev.push(linha); return; }
+    const p = (r.pctDado != null) ? r.pctDado : truncPct(q / base);
     linha.pct = p;
-    linha.dif = q - base * regra.com;
-    if (Math.abs(p - regra.com * 100) <= TOL + 1e-9) ok.push(linha); else div.push(linha);
+    linha.dif = q - base * regra.com;      // cobrado - negociado (assinado)
+    linha.difAbs = Math.abs(linha.dif);
+    if (Math.abs(p - negPct) <= TOL + 1e-9) ok.push(linha);
+    else if (p > negPct) mais.push(linha);   // cobrado a MAIS -> aba principal
+    else menos.push(linha);                   // cobrado a MENOS -> aba separada
   });
-  return { ok, div, dev, total: ok.length + div.length + dev.length };
+  return { ok, mais, menos, dev, total: ok.length + mais.length + menos.length + dev.length };
 }
 
 function matchCanal(mkt){
@@ -174,7 +180,7 @@ function parseData(v){
   }
   return null;
 }
-const num = v => { if (typeof v === 'number') return v; if (v == null || v === '') return 0; const n = parseFloat(String(v).replace(/\./g,'').replace(',','.')); return isNaN(n) ? 0 : n; };
+const num = v => { if (typeof v === 'number') return v; if (v == null || v === '') return 0; const s = String(v).replace(/[^\d,.-]/g,''); const n = parseFloat(s.replace(/\./g,'').replace(',','.')); return isNaN(n) ? 0 : n; };
 
 function extrairPedidos(wb){
   const ws = wb.Sheets[acharAba(wb)];
@@ -191,6 +197,38 @@ function extrairPedidos(wb){
   return out;
 }
 
+function detectarFormato(wb){
+  for (const n of wb.SheetNames){
+    const hdr = XLSX.utils.sheet_to_json(wb.Sheets[n], { header:1, range:0 })[0] || [];
+    if (hdr.includes('SKU Lojista') || hdr.includes('Comissão Aplicada %')) return 'CB_NATIVO';
+  }
+  return 'KONCILI';
+}
+function acharAbaCB(wb){
+  for (const n of wb.SheetNames){
+    const hdr = XLSX.utils.sheet_to_json(wb.Sheets[n], { header:1, range:0 })[0] || [];
+    if (hdr.includes('SKU Lojista')) return n;
+  }
+  return wb.SheetNames[0];
+}
+function extrairPedidosCB(wb){
+  const ws = wb.Sheets[acharAbaCB(wb)];
+  const js = XLSX.utils.sheet_to_json(ws, { defval:null, raw:true });
+  const out = [];
+  js.forEach((r, i) => {
+    const sku = r['SKU Lojista'] ? String(r['SKU Lojista']).trim() : null;
+    const data = parseData(r['Data do Pedido Incluído']);
+    if (!sku || !data) return;
+    const U = num(r['Valor da Transação']);
+    let W = num(r['Comissão Aplicada %']); if (W > 100) W = W / 100; if (W > 0 && W <= 1) W = W * 100;  // aceita 0,105 · 10,5 · 1050 (csv)
+    const X = num(r['Comissão Aplicada R$']);
+    const tipo = String(r['Tipo da Transação'] || '').trim().toUpperCase();
+    out.push({ linha: i + 2, canal: 'Casas Bahia', pedido: r['Número Pedido'], sku, data,
+      base: U, bruto: U, camp: 0, comRS: (X || U * W / 100), com: (X || U * W / 100),
+      pctDado: W, devFlag: (tipo === 'CANCELAMENTO') });
+  });
+  return out;
+}
 function numRegra(v){
   if (typeof v === 'number') return v > 1 ? v / 100 : v;
   if (v == null) return null;
@@ -324,7 +362,7 @@ async function carregarGoogle(id){
 }
 
 // ---------- UI ----------
-let RULES = null, repWB = null, repRows = [], res = null, canalDetectado = '', LINK = '';
+let RULES = null, repWB = null, repRows = [], res = null, canalDetectado = '', repFormato = 'KONCILI', LINK = '';
 try { LINK = localStorage.getItem('comissoes_link') || ''; } catch(e){}
 if (!LINK && EMBED.link) LINK = EMBED.link;
 
@@ -401,13 +439,14 @@ function setDrop(id, inputId, cb){
   inp.addEventListener('change', e => { if (e.target.files[0]) cb(e.target.files[0]); });
 }
 setDrop('dropRep','fRep', f => lerArquivo(f, wb => {
-  repWB = wb; repRows = extrairPedidos(wb);
-  document.getElementById('repName').textContent = f.name;
+  repWB = wb; repFormato = detectarFormato(wb);
+  repRows = (repFormato === 'CB_NATIVO') ? extrairPedidosCB(wb) : extrairPedidos(wb);
+  document.getElementById('repName').textContent = f.name + (repFormato === 'CB_NATIVO' ? '  (repasse nativo Casas Bahia)' : '');
   document.getElementById('dropRep').classList.add('ok');
   const cont = {}; repRows.forEach(r => cont[r.canal] = (cont[r.canal]||0)+1);
   const detectados = Object.keys(cont).sort((a,b) => cont[b]-cont[a]);
   setMsg('msg','','');
-  if (!detectados.length){ setMsg('msg','err','Nenhum canal reconhecido na coluna A (Marketplace).'); return; }
+  if (!detectados.length){ setMsg('msg','err', repFormato === 'CB_NATIVO' ? 'Não encontrei SKU/Data no repasse Casas Bahia (colunas "SKU Lojista" e "Data do Pedido Incluído").' : 'Nenhum canal reconhecido na coluna A (Marketplace).'); return; }
   canalDetectado = detectados[0];
   document.getElementById('canalRow').classList.remove('hidden');
   const tag = document.getElementById('canalTag');
@@ -431,55 +470,63 @@ function rodar(){
   const rules = RULES[canal] || [];
   if (!rules.length){ setMsg('msg','err',`A aba "${canal}" da planilha online não tem SKUs cadastrados.`); return; }
   let linhas = repRows.filter(r => r.canal === canal);
-  if (canal === 'Casas Bahia'){
+  if (canal === 'Casas Bahia' && repFormato !== 'CB_NATIVO'){
     if (!Object.keys(MAP_CB).length){ setMsg('msg','err','Não consegui carregar a aba "Pedidos Casas Bahia" da planilha online. Reconecte no item 1 (🔄 Atualizar agora) e tente de novo.'); return; }
     linhas = linhas.map(r => { const real = MAP_CB[normPed(r.pedido)]; return real ? { ...r, sku: real, skuMkt: r.sku } : r; });
   }
   res = conciliar(linhas, rules);
   res.canal = canal;
+  const impMais = res.mais.reduce((s,d) => s + d.difAbs, 0);
   document.getElementById('kTotal').textContent = res.total;
   document.getElementById('kOk').textContent = res.ok.length;
-  document.getElementById('kDiv').textContent = res.div.length;
+  document.getElementById('kMais').textContent = res.mais.length;
+  document.getElementById('kMenos').textContent = res.menos.length;
   document.getElementById('kDev').textContent = res.dev.length;
-  const imp = res.div.reduce((s,d) => s + d.dif, 0);
-  document.getElementById('kImp').textContent = 'R$ ' + fmt(imp);
+  document.getElementById('kImp').textContent = 'R$ ' + fmt(impMais);
   document.getElementById('resultado').classList.remove('hidden');
-  verAba('D');
-  setMsg('msg','ok', res.total ? `Conciliação ${canal}: ${res.div.length} divergência(s) em ${res.total} pedido(s) dentro do período negociado.`
+  verAba('M');
+  setMsg('msg','ok', res.total ? `Conciliação ${canal}: ${res.mais.length} cobrado(s) a mais e ${res.menos.length} a menos, em ${res.total} pedido(s) no período.`
     : `Nenhum pedido de ${canal} caiu dentro dos períodos negociados — confira as datas na planilha online.`);
 }
 
 function verAba(a){
-  document.getElementById('tabD').className = 'tab' + (a==='D' ? ' on' : '');
+  document.getElementById('tabM').className = 'tab' + (a==='M' ? ' on' : '');
+  document.getElementById('tabm').className = 'tab' + (a==='m' ? ' on' : '');
   document.getElementById('tabV').className = 'tab' + (a==='V' ? ' on' : '');
   const t = document.getElementById('tabela');
-  if (a === 'D'){
-    t.innerHTML = '<tr><th>Linha</th><th>ID do pedido</th><th>SKU</th><th>Data</th><th class="num">Valor bruto</th><th class="num">Campanha</th><th class="num">Comissão R$</th><th class="num">Base</th><th class="num">% cobrado</th><th class="num">% negociado</th><th class="num">Diferença R$</th></tr>' +
-      res.div.map(d => `<tr><td>${d.linha}</td><td>${d.pedido||''}</td><td>${d.sku}</td><td>${fmtD(d.data)}</td><td class="num">${fmt(d.bruto)}</td><td class="num">${fmt(d.camp)}</td><td class="num">${fmt(d.com)}</td><td class="num">${fmt(d.base)}</td><td class="num dif">${fmt(d.pct)}%</td><td class="num">${fmt(d.neg*100)}%</td><td class="num dif">${fmt(d.dif)}</td></tr>`).join('');
-  } else {
-    t.innerHTML = '<tr><th>Linha</th><th>ID do pedido</th><th>SKU</th><th>Data</th><th class="num">Valor bruto</th><th class="num">Campanha</th><th class="num">Comissão R$</th></tr>' +
-      res.dev.map(d => `<tr><td>${d.linha}</td><td>${d.pedido||''}</td><td>${d.sku}</td><td>${fmtD(d.data)}</td><td class="num">${fmt(d.bruto)}</td><td class="num">${fmt(d.camp)}</td><td class="num">${fmt(d.com)}</td></tr>`).join('');
-  }
+  const tabelaDiv = (arr, cls) => '<tr><th>Linha</th><th>ID do pedido</th><th>SKU</th><th>Data</th><th class="num">Valor transação</th><th class="num">Comissão R$</th><th class="num">% cobrado</th><th class="num">% negociado</th><th class="num">Diferença R$</th></tr>' +
+      arr.map(d => `<tr><td>${d.linha}</td><td>${d.pedido||''}</td><td>${d.sku}</td><td>${fmtD(d.data)}</td><td class="num">${fmt(d.bruto)}</td><td class="num">${fmt(d.com)}</td><td class="num ${cls}">${fmt(d.pct)}%</td><td class="num">${fmt(d.neg*100)}%</td><td class="num ${cls}">${fmt(d.difAbs)}</td></tr>`).join('');
+  if (a === 'M') t.innerHTML = tabelaDiv(res.mais, 'dif');
+  else if (a === 'm') t.innerHTML = tabelaDiv(res.menos, '');
+  else t.innerHTML = '<tr><th>Linha</th><th>ID do pedido</th><th>SKU</th><th>Data</th><th class="num">Valor transação</th><th class="num">Comissão R$</th></tr>' +
+      res.dev.map(d => `<tr><td>${d.linha}</td><td>${d.pedido||''}</td><td>${d.sku}</td><td>${fmtD(d.data)}</td><td class="num">${fmt(d.bruto)}</td><td class="num">${fmt(d.com)}</td></tr>`).join('');
 }
 
 function exportar(){
   const wb = XLSX.utils.book_new();
-  const imp = res.div.reduce((s,d) => s + d.dif, 0);
+  const impMais = res.mais.reduce((s,d) => s + d.difAbs, 0);
+  const impMenos = res.menos.reduce((s,d) => s + d.difAbs, 0);
   const resumo = [['Conciliação de Comissões — ' + res.canal], [],
     ['Gerado em', new Date().toLocaleString('pt-BR')],
     ['Pedidos no período negociado', res.total],
     ['Conformes', res.ok.length],
-    ['Divergentes', res.div.length],
+    ['Cobrado a mais (qtd)', res.mais.length],
+    ['Cobrado a menos (qtd)', res.menos.length],
     ['Devoluções/estornos (não avaliados)', res.dev.length],
-    ['Impacto total (cobrado − negociado) R$', Math.round(imp*100)/100]];
+    ['Total cobrado a MAIS R$', Math.round(impMais*100)/100],
+    ['Total cobrado a MENOS R$', Math.round(impMenos*100)/100]];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(resumo), 'Resumo');
-  const hd = ['Linha origem','ID do pedido','SKU','Data do pedido','Valor bruto','Campanha','Comissão cobrada R$','Base cálculo','% cobrado','% negociado','Diferença R$'];
-  const dv = res.div.map(d => [d.linha, d.pedido, d.sku, fmtD(d.data), d.bruto, d.camp, d.com, Math.round(d.base*100)/100, d.pct/100, d.neg, Math.round(d.dif*100)/100]);
-  const wsD = XLSX.utils.aoa_to_sheet([hd, ...dv]);
-  for (let i = 2; i <= dv.length + 1; i++){ ['I','J'].forEach(c => { const cl = wsD[c+i]; if (cl) cl.z = '0.00%'; }); ['E','F','G','H','K'].forEach(c => { const cl = wsD[c+i]; if (cl) cl.z = '#,##0.00'; }); }
-  XLSX.utils.book_append_sheet(wb, wsD, 'Divergências');
-  const hd2 = ['Linha origem','ID do pedido','SKU','Data do pedido','Valor bruto','Campanha','Comissão R$'];
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([hd2, ...res.dev.map(d => [d.linha, d.pedido, d.sku, fmtD(d.data), d.bruto, d.camp, d.com])]), 'Devoluções-Estornos');
+  const hd = ['Linha origem','ID do pedido','SKU','Data do pedido','Valor transação','Comissão cobrada R$','% cobrado','% negociado','Diferença R$'];
+  const mk = arr => arr.map(d => [d.linha, d.pedido, d.sku, fmtD(d.data), d.bruto, d.com, d.pct/100, d.neg, Math.round(d.difAbs*100)/100]);
+  const addAba = (arr, nome) => {
+    const dv = mk(arr); const ws = XLSX.utils.aoa_to_sheet([hd, ...dv]);
+    for (let i = 2; i <= dv.length + 1; i++){ ['G','H'].forEach(c => { const cl = ws[c+i]; if (cl) cl.z = '0.00%'; }); ['E','F','I'].forEach(c => { const cl = ws[c+i]; if (cl) cl.z = '#,##0.00'; }); }
+    XLSX.utils.book_append_sheet(wb, ws, nome);
+  };
+  addAba(res.mais, 'Cobrado a mais');
+  addAba(res.menos, 'Cobrado a menos');
+  const hd2 = ['Linha origem','ID do pedido','SKU','Data do pedido','Valor transação','Comissão R$'];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([hd2, ...res.dev.map(d => [d.linha, d.pedido, d.sku, fmtD(d.data), d.bruto, d.com])]), 'Devoluções-Estornos');
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['SKU','Comissão','Início','Fim'], ...RULES[res.canal].map(g => [g.sku, g.com, fmtD(g.ini), fmtD(g.fim)])]), 'Regras aplicadas');
   const nome = `Conciliação ${res.canal} - ${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.xlsx`;
   XLSX.writeFile(wb, nome);
