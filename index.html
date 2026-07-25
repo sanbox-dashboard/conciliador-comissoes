@@ -90,7 +90,7 @@
       <select id="canalSel" class="hidden"></select>
       <button id="btnRun" onclick="rodar()">Conciliar</button>
     </div>
-    <div class="rules">Regras: Amazon/Magalu (Koncili) → % cobrado = |Comissão| ÷ (Valor bruto − |Campanhas|), truncado na 2ª casa · <b>Casas Bahia</b> (repasse nativo Via) → usa a coluna <b>Comissão Aplicada %</b> direto e o <b>SKU Lojista</b> · período pela <b>Data do pedido</b> · tolerância de 0,01 p.p. · quando <b>% cobrado &lt; negociado</b> vai para a aba "Cobrado a menos"; a principal mostra só <b>cobrado a mais</b>.</div>
+    <div class="rules">Regras por canal: <b>Amazon</b> (repasse settlement) → % cobrado = |Commission| ÷ (Principal − |Promoção|), agrupado por pedido+SKU · <b>Casas Bahia</b> (repasse nativo Via) → coluna <b>Comissão Aplicada %</b> direto, com <b>SKU Lojista</b> · <b>Magalu</b> (Koncili) → |Comissão| ÷ (Valor bruto − |Campanhas|) · período pela <b>Data do pedido</b> · tolerância de 0,01 p.p. · quando <b>% cobrado &lt; negociado</b> vai para a aba "Cobrado a menos"; a principal mostra só <b>cobrado a mais</b>.</div>
     <div class="msg" id="msg"></div>
   </div>
 
@@ -201,6 +201,7 @@ function detectarFormato(wb){
   for (const n of wb.SheetNames){
     const hdr = XLSX.utils.sheet_to_json(wb.Sheets[n], { header:1, range:0 })[0] || [];
     if (hdr.includes('SKU Lojista') || hdr.includes('Comissão Aplicada %')) return 'CB_NATIVO';
+    if (hdr.includes('price-type') && hdr.includes('item-related-fee-type')) return 'AMZ_NATIVO';
   }
   return 'KONCILI';
 }
@@ -226,6 +227,42 @@ function extrairPedidosCB(wb){
     out.push({ linha: i + 2, canal: 'Casas Bahia', pedido: r['Número Pedido'], sku, data,
       base: U, bruto: U, camp: 0, comRS: (X || U * W / 100), com: (X || U * W / 100),
       pctDado: W, devFlag: (tipo === 'CANCELAMENTO') });
+  });
+  return out;
+}
+function acharAbaAMZ(wb){
+  for (const n of wb.SheetNames){
+    const hdr = XLSX.utils.sheet_to_json(wb.Sheets[n], { header:1, range:0 })[0] || [];
+    if (hdr.includes('price-type') && hdr.includes('item-related-fee-type')) return n;
+  }
+  return wb.SheetNames[0];
+}
+// Repasse nativo Amazon (settlement): várias linhas por pedido → agrupa por pedido+SKU.
+// Comissão = |Commission| ÷ (Principal − |Promoção|). Principal = price-amount onde price-type='Principal'.
+function extrairPedidosAMZ(wb){
+  const ws = wb.Sheets[acharAbaAMZ(wb)];
+  const js = XLSX.utils.sheet_to_json(ws, { defval:null, raw:true });
+  const g = {};
+  js.forEach((r, i) => {
+    const order = r['order-id'] ? String(r['order-id']).trim() : '';
+    const sku = r['sku'] ? String(r['sku']).trim() : '';
+    if (!order || !sku) return;
+    const key = order + '||' + sku;
+    let d = g[key];
+    if (!d){ d = g[key] = { canal:'Amazon', pedido:order, sku, data:null, principal:0, promo:0, comm:0, linha:i+2 }; }
+    if (String(r['price-type'] || '').trim() === 'Principal') d.principal += num(r['price-amount']);
+    if (String(r['item-related-fee-type'] || '').trim() === 'Commission') d.comm += num(r['item-related-fee-amount']);
+    d.promo += num(r['promotion-amount']);
+    if (!d.data){ const dt = parseData(r['posted-date']); if (dt) d.data = dt; }
+  });
+  const out = [];
+  Object.values(g).forEach(d => {
+    if (!d.data) return;
+    const base = d.principal - Math.abs(d.promo);
+    const q = Math.abs(d.comm);
+    out.push({ linha:d.linha, canal:'Amazon', pedido:d.pedido, sku:d.sku, data:d.data,
+      base:base, bruto:d.principal, camp:-Math.abs(d.promo), comRS:q, com:q,
+      devFlag:(d.principal <= 0 || q === 0) });
   });
   return out;
 }
@@ -440,13 +477,13 @@ function setDrop(id, inputId, cb){
 }
 setDrop('dropRep','fRep', f => lerArquivo(f, wb => {
   repWB = wb; repFormato = detectarFormato(wb);
-  repRows = (repFormato === 'CB_NATIVO') ? extrairPedidosCB(wb) : extrairPedidos(wb);
-  document.getElementById('repName').textContent = f.name + (repFormato === 'CB_NATIVO' ? '  (repasse nativo Casas Bahia)' : '');
+  repRows = (repFormato === 'CB_NATIVO') ? extrairPedidosCB(wb) : (repFormato === 'AMZ_NATIVO') ? extrairPedidosAMZ(wb) : extrairPedidos(wb);
+  document.getElementById('repName').textContent = f.name + (repFormato === 'CB_NATIVO' ? '  (repasse nativo Casas Bahia)' : repFormato === 'AMZ_NATIVO' ? '  (repasse settlement Amazon)' : '');
   document.getElementById('dropRep').classList.add('ok');
   const cont = {}; repRows.forEach(r => cont[r.canal] = (cont[r.canal]||0)+1);
   const detectados = Object.keys(cont).sort((a,b) => cont[b]-cont[a]);
   setMsg('msg','','');
-  if (!detectados.length){ setMsg('msg','err', repFormato === 'CB_NATIVO' ? 'Não encontrei SKU/Data no repasse Casas Bahia (colunas "SKU Lojista" e "Data do Pedido Incluído").' : 'Nenhum canal reconhecido na coluna A (Marketplace).'); return; }
+  if (!detectados.length){ setMsg('msg','err', repFormato === 'CB_NATIVO' ? 'Não encontrei SKU/Data no repasse Casas Bahia (colunas "SKU Lojista" e "Data do Pedido Incluído").' : repFormato === 'AMZ_NATIVO' ? 'Não encontrei pedidos no settlement da Amazon (colunas "order-id", "sku", "price-type").' : 'Nenhum canal reconhecido na coluna A (Marketplace).'); return; }
   canalDetectado = detectados[0];
   document.getElementById('canalRow').classList.remove('hidden');
   const tag = document.getElementById('canalTag');
