@@ -53,9 +53,19 @@
   .canalTag{background:#eef4fa;color:var(--azul);border:1px solid var(--azul2);border-radius:14px;padding:4px 12px;font-size:13px;font-weight:bold}
   .status{font-size:13px;margin-top:10px;color:#444}
   .status .on{color:var(--verde);font-weight:bold}
+  #topnav{max-width:1100px;margin:0 auto 16px;display:flex;gap:4px;border-bottom:2px solid var(--borda)}
+  #topnav .topbtn{background:none;border:none;border-bottom:3px solid transparent;color:#777;font:bold 15px Arial;padding:12px 20px;cursor:pointer;margin-bottom:-2px}
+  #topnav .topbtn:hover{color:var(--azul2)}
+  #topnav .topbtn.on{color:var(--azul);border-bottom-color:var(--azul)}
+  #view-difal iframe{width:100%;border:0;min-height:100vh;display:block}
 </style>
 </head>
 <body>
+<div id="topnav">
+  <button class="topbtn on" id="tabConc" onclick="mostrarView('conc')">Conciliador de Comissões</button>
+  <button class="topbtn" id="tabDifal" onclick="mostrarView('difal')">Conferência DIFAL</button>
+</div>
+<div id="view-conc">
 <div class="wrap">
   <h1>Conciliador de Comissões — Marketplaces</h1>
   <div class="sub">As comissões negociadas são lidas automaticamente da sua planilha online (OneDrive). Você só preenche a planilha — aqui, é só subir o repasse do Koncili.</div>
@@ -117,6 +127,381 @@
       </div>
     </div>
   </div>
+</div>
+</div><!-- /view-conc -->
+<div id="view-difal" style="display:none">
+  <iframe id="difalFrame" title="Conferência DIFAL" srcdoc="<!DOCTYPE html>
+<html lang=&quot;pt-BR&quot;>
+<head>
+<meta charset=&quot;UTF-8&quot; />
+<meta name=&quot;viewport&quot; content=&quot;width=device-width,initial-scale=1&quot; />
+<title>Sanbox — Fechamento ICMS DIFAL</title>
+<link href=&quot;https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;800;900&amp;family=Bebas+Neue&amp;display=swap&quot; rel=&quot;stylesheet&quot;>
+<script src=&quot;https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js&quot;></script>
+<style>
+:root{--or:#F5A623;--od:#D4881A;--bg:#F2F5F9;--wh:#fff;--bd:#E2E8F0;--tx:#1A1F2E;--mu:#7A8799;--dm:#E2E8F0;--gr:#16A34A;--re:#DC2626;--vi:#7C5CFF;--sh:0 1px 8px rgba(0,0,0,.07);}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Nunito',sans-serif;background:var(--bg);color:var(--tx);min-height:100vh;}
+body::before{content:'';position:fixed;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,var(--od),var(--or),#FFC85A,var(--or));z-index:99;}
+.app{min-height:100vh;display:flex;flex-direction:column;}
+.content{flex:1;padding:14px 18px 22px;display:flex;flex-direction:column;gap:9px;max-width:1280px;margin:0 auto;width:100%;}
+
+/* CARD */
+.card{background:var(--wh);border:1px solid var(--bd);border-radius:11px;padding:12px 15px;box-shadow:var(--sh);}
+
+/* HEADER */
+.hdr{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;}
+.brand{display:flex;align-items:center;gap:10px;}
+.bsep{width:1px;height:24px;background:var(--bd);}
+.bsub{font-size:.58rem;font-weight:800;color:var(--mu);letter-spacing:.2em;text-transform:uppercase;}
+.hc{text-align:center;}
+.dlbl{font-size:.56rem;font-weight:800;color:var(--mu);letter-spacing:.15em;text-transform:uppercase;}
+.dval{font-family:'Bebas Neue';font-size:1.05rem;color:var(--od);letter-spacing:.03em;}
+.hr{display:flex;align-items:center;gap:10px;}
+.live{display:flex;align-items:center;gap:5px;background:rgba(245,166,35,.1);border:1px solid rgba(245,166,35,.3);padding:3px 10px;border-radius:999px;font-size:.58rem;font-weight:800;color:var(--od);}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--or);animation:sonar 2s ease-in-out infinite;}
+@keyframes sonar{0%{box-shadow:0 0 0 0 rgba(245,166,35,.5);}70%{box-shadow:0 0 0 8px rgba(245,166,35,0);}100%{box-shadow:0 0 0 0 rgba(245,166,35,0);}}
+.clock{font-family:'Bebas Neue';font-size:1.7rem;color:var(--od);}
+.btn-sm{background:none;border:1px solid var(--bd);border-radius:6px;padding:4px 10px;font:800 .58rem 'Nunito';color:var(--mu);cursor:pointer;}
+.btn-sm:hover{border-color:var(--or);color:var(--or);}
+
+/* SECTION TITLE */
+.atit{font-size:.58rem;font-weight:900;color:var(--mu);letter-spacing:.14em;text-transform:uppercase;display:flex;align-items:center;gap:6px;margin-bottom:9px;}
+.atit::after{content:'';flex:1;height:1px;background:var(--dm);}
+.pdot{width:5px;height:5px;border-radius:50%;background:var(--or);}
+
+/* DROPZONE */
+#drop{border:2px dashed var(--bd);border-radius:10px;padding:26px 18px;text-align:center;cursor:pointer;transition:.15s;background:var(--bg);}
+#drop.drag{border-color:var(--or);background:rgba(245,166,35,.06);}
+#drop .big{font-size:.82rem;font-weight:800;color:var(--tx);}
+#drop .big b{color:var(--od);}
+#drop .hint{color:var(--mu);font-size:.64rem;font-weight:700;margin-top:5px;}
+.filechip{margin-top:11px;font-size:.68rem;font-weight:800;color:var(--gr);background:rgba(22,163,74,.07);border:1px solid rgba(22,163,74,.25);padding:7px 12px;border-radius:8px;display:none;}
+
+/* CONFIG GRID */
+.grid2{display:grid;grid-template-columns:1fr 1.4fr;gap:9px;}
+@media(max-width:820px){.grid2{grid-template-columns:1fr;}}
+.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:11px;}
+.flbl{font-size:.58rem;font-weight:800;color:var(--mu);letter-spacing:.12em;text-transform:uppercase;}
+select{border:1px solid var(--bd);border-radius:6px;padding:5px 10px;font:800 .72rem 'Nunito';background:var(--wh);color:var(--tx);}
+.switch{display:flex;align-items:center;gap:9px;}
+input[type=checkbox]{width:17px;height:17px;accent-color:var(--or);cursor:pointer;}
+.switch label{font-size:.7rem;font-weight:700;color:var(--tx);cursor:pointer;}
+.formula{font-size:.66rem;font-weight:700;color:var(--mu);margin-top:4px;line-height:1.6;}
+.formula code{background:var(--bg);border:1px solid var(--bd);padding:1px 6px;border-radius:5px;color:var(--od);font-weight:800;}
+
+/* BUTTONS */
+.btn{cursor:pointer;border:none;border-radius:8px;font:900 .7rem 'Nunito';padding:9px 18px;transition:.15s;letter-spacing:.03em;text-transform:uppercase;}
+.btn-primary{background:var(--or);color:#fff;}
+.btn-primary:hover{background:var(--od);}
+.btn-primary:disabled{opacity:.4;cursor:not-allowed;}
+.btn-dl{background:var(--gr);color:#fff;}
+.btn-dl:hover{filter:brightness(.94);}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
+.status{font-size:.66rem;font-weight:700;color:var(--mu);}
+
+/* RATES */
+.rates{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:7px;}
+.rate{background:var(--bg);border:1px solid var(--bd);border-radius:7px;padding:5px 8px;display:flex;align-items:center;justify-content:space-between;}
+.rate span{font-size:.66rem;font-weight:900;color:var(--mu);}
+.rate input{width:46px;background:transparent;border:none;border-bottom:1px solid var(--bd);color:var(--tx);text-align:right;font:800 .72rem 'Nunito';padding:1px 0;}
+.rate input:focus{outline:none;border-color:var(--or);}
+.rate.origin{border-color:var(--or);background:rgba(245,166,35,.08);}
+.rate.origin span{color:var(--od);}
+
+/* KPIs */
+.kr{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
+@media(max-width:820px){.kr{grid-template-columns:1fr 1fr;}}
+@media(max-width:440px){.kr{grid-template-columns:1fr;}}
+.kpi{background:var(--wh);border:1px solid var(--bd);border-radius:11px;padding:12px 15px;box-shadow:var(--sh);position:relative;overflow:hidden;}
+.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--kc,var(--or));}
+.kl{font-size:.56rem;font-weight:800;color:var(--mu);letter-spacing:.14em;text-transform:uppercase;margin-bottom:4px;}
+.kv{font-family:'Bebas Neue';font-size:2rem;line-height:1;color:var(--kc,var(--od));margin-bottom:3px;letter-spacing:.02em;}
+.ks{font-size:.6rem;font-weight:700;color:var(--mu);}
+
+/* TABLE */
+.tscroll{overflow:auto;max-height:460px;}
+table{width:100%;border-collapse:collapse;font-size:.7rem;}
+thead th{padding:6px 10px;text-align:right;font-size:.56rem;font-weight:900;color:var(--mu);letter-spacing:.08em;text-transform:uppercase;white-space:nowrap;border-bottom:2px solid var(--bd);position:sticky;top:0;background:var(--wh);z-index:2;}
+thead th:first-child{text-align:left;}
+tbody tr{border-bottom:1px solid var(--bg);}
+tbody tr:hover{background:var(--bg);}
+tbody td{padding:6px 10px;text-align:right;font-size:.7rem;font-weight:700;color:var(--tx);}
+tbody td:first-child{text-align:left;font-weight:900;}
+tfoot tr{border-top:2px solid var(--bd);}
+tfoot td{padding:7px 10px;text-align:right;font-size:.72rem;font-weight:900;color:var(--tx);background:var(--bg);}
+tfoot td:first-child{text-align:left;}
+.pill{font-size:.56rem;font-weight:800;padding:2px 7px;border-radius:99px;background:rgba(245,166,35,.1);color:var(--od);}
+
+/* WARN */
+.warn{background:rgba(245,166,35,.08);border:1px solid rgba(245,166,35,.35);color:var(--od);padding:10px 13px;border-radius:8px;font-size:.68rem;font-weight:700;display:none;margin-top:10px;}
+
+/* TICKER */
+.tk{background:var(--wh);border:1px solid var(--bd);border-radius:8px;padding:5px 12px;overflow:hidden;white-space:nowrap;box-shadow:var(--sh);}
+.ti{display:inline-block;animation:tick 34s linear infinite;font-size:.66rem;font-weight:700;color:var(--mu);}
+.ti .hi{color:var(--od);font-weight:900;}.ti .sp{color:var(--bd);margin:0 12px;}
+@keyframes tick{from{transform:translateX(100%);}to{transform:translateX(-100%);}}
+
+.hidden{display:none;}
+.foot{color:var(--mu);font-size:.6rem;font-weight:700;text-align:center;margin-top:12px;line-height:1.8;}
+</style>
+</head>
+<body>
+<div class=&quot;app&quot;>
+  <div class=&quot;content&quot;>
+
+    <!-- HEADER -->
+    <div class=&quot;card hdr&quot;>
+      <div class=&quot;brand&quot;>
+        <svg height=&quot;30&quot; viewBox=&quot;0 0 210 58&quot; xmlns=&quot;http://www.w3.org/2000/svg&quot;>
+          <rect x=&quot;0&quot; y=&quot;0&quot; width=&quot;56&quot; height=&quot;56&quot; rx=&quot;12&quot; fill=&quot;#F5A623&quot;/>
+          <rect x=&quot;11&quot; y=&quot;11&quot; width=&quot;34&quot; height=&quot;34&quot; rx=&quot;7&quot; fill=&quot;white&quot;/>
+          <rect x=&quot;19&quot; y=&quot;20&quot; width=&quot;13&quot; height=&quot;7&quot; rx=&quot;2&quot; fill=&quot;#F5A623&quot;/>
+          <text x=&quot;66&quot; y=&quot;43&quot; font-family=&quot;Nunito&quot; font-weight=&quot;900&quot; font-size=&quot;36&quot; fill=&quot;#1A1A1A&quot;>san</text>
+          <text x=&quot;130&quot; y=&quot;43&quot; font-family=&quot;Nunito&quot; font-weight=&quot;900&quot; font-size=&quot;36&quot; fill=&quot;#F5A623&quot;>box</text>
+        </svg>
+        <div class=&quot;bsep&quot;></div><div class=&quot;bsub&quot;>Fechamento ICMS DIFAL</div>
+      </div>
+      <div class=&quot;hc&quot;><div class=&quot;dlbl&quot;>Origem</div><div class=&quot;dval&quot; id=&quot;dRef&quot;>ES · 17%</div></div>
+      <div class=&quot;hr&quot;>
+        <div class=&quot;live&quot;><div class=&quot;dot&quot;></div><span>PROCESSAMENTO LOCAL</span></div>
+        <div class=&quot;clock&quot; id=&quot;clock&quot;>--:--:--</div>
+      </div>
+    </div>
+
+    <!-- UPLOAD -->
+    <div class=&quot;card&quot;>
+      <div class=&quot;atit&quot;><div class=&quot;pdot&quot;></div>1 · Arquivo da remessa</div>
+      <div id=&quot;drop&quot;>
+        <div class=&quot;big&quot;>Arraste o arquivo <b>.xls / .xlsx</b> aqui ou <b>clique para escolher</b></div>
+        <div class=&quot;hint&quot;>Relatório de Notas Fiscais por Operação (Olist / ERP)</div>
+        <input type=&quot;file&quot; id=&quot;file&quot; accept=&quot;.xls,.xlsx&quot; class=&quot;hidden&quot; />
+      </div>
+      <div class=&quot;filechip&quot; id=&quot;filechip&quot;></div>
+    </div>
+
+    <!-- CONFIG -->
+    <div class=&quot;grid2&quot;>
+      <div class=&quot;card&quot;>
+        <div class=&quot;atit&quot;><div class=&quot;pdot&quot;></div>2 · Parâmetros</div>
+        <div class=&quot;row&quot;><span class=&quot;flbl&quot;>Estado de origem</span><select id=&quot;origin&quot;></select></div>
+        <div class=&quot;row switch&quot;>
+          <input type=&quot;checkbox&quot; id=&quot;zero&quot; checked />
+          <label for=&quot;zero&quot;>Zerar ICMS ST em devoluções e vendas internas (destino = origem)</label>
+        </div>
+        <p class=&quot;formula&quot;>
+          <code>ICMS ST = Base ICMS × alíq. destino − ICMS</code> · valores negativos zerados ·
+          <code>ICMS Total = ICMS + ICMS ST</code>
+        </p>
+      </div>
+      <div class=&quot;card&quot;>
+        <div class=&quot;atit&quot;><div class=&quot;pdot&quot;></div>3 · Alíquotas internas por UF (%) — editável
+          <button class=&quot;btn-sm&quot; id=&quot;reset&quot; style=&quot;text-transform:none;letter-spacing:0&quot;>⟳ Restaurar 2026</button>
+        </div>
+        <div class=&quot;rates&quot; id=&quot;rates&quot;></div>
+      </div>
+    </div>
+
+    <!-- ACTIONS -->
+    <div class=&quot;card actions&quot;>
+      <button class=&quot;btn btn-primary&quot; id=&quot;process&quot; disabled>Calcular fechamento</button>
+      <button class=&quot;btn btn-dl hidden&quot; id=&quot;download&quot;>↓ Baixar planilha (.xlsx)</button>
+      <span class=&quot;status&quot; id=&quot;status&quot;>Aguardando arquivo…</span>
+    </div>
+    <div class=&quot;warn&quot; id=&quot;warn&quot;></div>
+
+    <!-- KPIs -->
+    <div class=&quot;kr hidden&quot; id=&quot;kpis&quot;>
+      <div class=&quot;kpi&quot; style=&quot;--kc:var(--or)&quot;><div class=&quot;kl&quot;>Base ICMS somada</div><div class=&quot;kv&quot; id=&quot;k-base&quot;>R$ --</div><div class=&quot;ks&quot;>soma da base</div></div>
+      <div class=&quot;kpi&quot; style=&quot;--kc:#64748b&quot;><div class=&quot;kl&quot;>ICMS destacado (origem)</div><div class=&quot;kv&quot; id=&quot;k-n&quot; style=&quot;color:#64748b&quot;>R$ --</div><div class=&quot;ks&quot;>coluna ICMS</div></div>
+      <div class=&quot;kpi&quot; style=&quot;--kc:var(--od)&quot;><div class=&quot;kl&quot;>ICMS ST / DIFAL a recolher</div><div class=&quot;kv&quot; id=&quot;k-st&quot;>R$ --</div><div class=&quot;ks&quot; id=&quot;k-st-sub&quot;>--</div></div>
+      <div class=&quot;kpi&quot; style=&quot;--kc:var(--gr)&quot;><div class=&quot;kl&quot;>ICMS Total (ICMS + ST)</div><div class=&quot;kv&quot; id=&quot;k-total&quot; style=&quot;color:var(--gr)&quot;>R$ --</div><div class=&quot;ks&quot;>consolidado</div></div>
+    </div>
+
+    <!-- TABLE -->
+    <div class=&quot;card hidden&quot; id=&quot;results&quot;>
+      <div class=&quot;atit&quot;><div class=&quot;pdot&quot;></div>Detalhamento por UF de destino</div>
+      <div class=&quot;tscroll&quot;>
+        <table id=&quot;uftable&quot;>
+          <thead><tr>
+            <th>UF</th><th>Alíq. %</th><th>Notas</th><th>Base ICMS</th>
+            <th>ICMS (origem)</th><th>ICMS ST (DIFAL)</th><th>ICMS Total</th>
+          </tr></thead>
+          <tbody></tbody>
+          <tfoot></tfoot>
+        </table>
+      </div>
+    </div>
+
+    <!-- TICKER -->
+    <div class=&quot;tk hidden&quot; id=&quot;tkwrap&quot;><div class=&quot;ti&quot; id=&quot;ticker&quot;></div></div>
+
+    <div class=&quot;foot&quot;>
+      Sanbox · Fechamento ICMS DIFAL · alíquotas internas de referência 2026 (editáveis) · confira a legislação vigente de cada UF antes do recolhimento · processamento 100% local no navegador.
+    </div>
+  </div>
+</div>
+
+<script>
+/* ---------- Alíquotas internas 2026 (editáveis) ---------- */
+const RATES_2026 = {
+  AC:19, AL:21.5, AP:18, AM:20, BA:20.5, CE:20, DF:20, ES:17, GO:19, MA:23,
+  MT:17, MS:17, MG:18, PA:19, PB:20, PR:19.5, PE:20.5, PI:22.5, RJ:22, RN:20,
+  RS:17, RO:19.5, RR:20, SC:17, SP:18, SE:20, TO:20
+};
+const UFS = Object.keys(RATES_2026).sort();
+const round2 = v => Math.round((v + Number.EPSILON) * 100) / 100;
+const money = v => 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+let workbook=null, sheetName=null, fileBase='fechamento', processed=null;
+
+/* ---------- Relógio ---------- */
+function tick(){const d=new Date();document.getElementById('clock').textContent=d.toLocaleTimeString('pt-BR');}
+setInterval(tick,1000); tick();
+
+/* ---------- Origem + tabela de alíquotas ---------- */
+const originSel=document.getElementById('origin');
+UFS.forEach(uf=>{const o=document.createElement('option');o.value=uf;o.textContent=uf;originSel.appendChild(o);});
+originSel.value='ES';
+function buildRates(){
+  const box=document.getElementById('rates'); box.innerHTML='';
+  UFS.forEach(uf=>{
+    const d=document.createElement('div'); d.className='rate'+(uf===originSel.value?' origin':''); d.dataset.uf=uf;
+    d.innerHTML=`<span>${uf}</span><input type=&quot;number&quot; step=&quot;0.01&quot; min=&quot;0&quot; value=&quot;${RATES_2026[uf]}&quot; data-uf=&quot;${uf}&quot;>`;
+    box.appendChild(d);
+  });
+}
+buildRates();
+originSel.addEventListener('change',()=>{buildRates();
+  document.getElementById('dRef').textContent=originSel.value+' · '+ (RATES_2026[originSel.value]??'--') +'%';});
+document.getElementById('reset').addEventListener('click',()=>{
+  UFS.forEach(uf=>{const i=document.querySelector(`input[data-uf=&quot;${uf}&quot;]`); if(i)i.value=RATES_2026[uf];});
+});
+function currentRates(){const r={};document.querySelectorAll('input[data-uf]').forEach(i=>{const v=parseFloat(i.value);if(!isNaN(v))r[i.dataset.uf]=v;});return r;}
+
+/* ---------- Upload ---------- */
+const drop=document.getElementById('drop'), fileInput=document.getElementById('file');
+drop.addEventListener('click',()=>fileInput.click());
+drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('drag');});
+drop.addEventListener('dragleave',()=>drop.classList.remove('drag'));
+drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('drag');if(e.dataTransfer.files[0])loadFile(e.dataTransfer.files[0]);});
+fileInput.addEventListener('change',e=>{if(e.target.files[0])loadFile(e.target.files[0]);});
+function loadFile(file){
+  fileBase=file.name.replace(/\.[^.]+$/,'')||'fechamento';
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      workbook=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
+      sheetName=workbook.SheetNames[0];
+      const chip=document.getElementById('filechip');
+      chip.style.display='block'; chip.textContent='✓ '+file.name+'  ·  aba: '+sheetName;
+      document.getElementById('process').disabled=false;
+      document.getElementById('status').textContent='Arquivo carregado. Clique em Calcular fechamento.';
+      document.getElementById('download').classList.add('hidden');
+      document.getElementById('results').classList.add('hidden');
+      document.getElementById('kpis').classList.add('hidden');
+      document.getElementById('tkwrap').classList.add('hidden');
+    }catch(err){document.getElementById('status').textContent='Erro ao ler o arquivo: '+err.message;}
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+/* ---------- Núcleo do cálculo ---------- */
+function processRows(rows, opts){
+  const origin=opts.origin, rates=opts.rates, zeroNoDifal=opts.zeroNoDifal;
+  let hIdx=rows.findIndex(r=>r &amp;&amp; r[12]==='Base ICMS'); if(hIdx<0)hIdx=0;
+  const NEW1=19,NEW2=20;
+  rows[hIdx][NEW1]='ICMS Total'; rows[hIdx][NEW2]='ICMS % (destino)';
+  let cat='';
+  const totals={base:0,icmsN:0,icmsST:0,icmsTotal:0,comDifal:0,semDifal:0,semAliq:new Set()};
+  const byUF={};
+  for(let i=hIdx+1;i<rows.length;i++){
+    const r=rows[i]; if(!r)continue;
+    const A=r[0],B=r[1];
+    if(A &amp;&amp; (B===null||B===undefined||B==='')){cat=String(A);continue;}
+    if(B===null||B===undefined||B==='')continue;
+    const isDev=/devolu/i.test(cat);
+    const uf=(r[3]||'').toString().trim().toUpperCase();
+    const base=Number(r[12])||0, icms=Number(r[13])||0, rate=rates[uf];
+    const intra=uf===origin;
+    let q=0,pct=null;
+    const noDifal=isDev||intra;
+    const applies = zeroNoDifal ? (rate!=null &amp;&amp; !noDifal) : (rate!=null);
+    if(applies){const q0=round2(base*rate/100-icms); q=q0<0?0:q0; pct=rate;}
+    if(!noDifal &amp;&amp; rate==null) totals.semAliq.add(uf);
+    const icmsTotal=round2(icms+q);
+    r[16]=q; r[NEW1]=icmsTotal; r[NEW2]=pct;
+    totals.base+=base; totals.icmsN+=icms; totals.icmsST+=q; totals.icmsTotal+=icmsTotal;
+    if(q>0)totals.comDifal++; else totals.semDifal++;
+    if(!byUF[uf])byUF[uf]={uf,base:0,icmsN:0,icmsST:0,icmsTotal:0,notas:0,rate:rate??null};
+    const b=byUF[uf]; b.base+=base;b.icmsN+=icms;b.icmsST+=q;b.icmsTotal+=icmsTotal;b.notas++;
+  }
+  ['base','icmsN','icmsST','icmsTotal'].forEach(k=>totals[k]=round2(totals[k]));
+  totals.semAliq=[...totals.semAliq];
+  return {rows,totals,byUF,headerIdx:hIdx};
+}
+
+/* ---------- Executar ---------- */
+document.getElementById('process').addEventListener('click',()=>{
+  if(!workbook)return;
+  const ws=workbook.Sheets[sheetName];
+  const rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null});
+  const res=processRows(rows,{origin:originSel.value,rates:currentRates(),zeroNoDifal:document.getElementById('zero').checked});
+  processed=res; renderResults(res); buildOutput(res);
+  document.getElementById('download').classList.remove('hidden');
+  document.getElementById('status').textContent='Cálculo concluído.';
+});
+
+function renderResults(res){
+  const t=res.totals;
+  document.getElementById('k-base').textContent=money(t.base);
+  document.getElementById('k-n').textContent=money(t.icmsN);
+  document.getElementById('k-st').textContent=money(t.icmsST);
+  document.getElementById('k-total').textContent=money(t.icmsTotal);
+  document.getElementById('k-st-sub').textContent=t.comDifal+' notas com DIFAL';
+  document.getElementById('kpis').classList.remove('hidden');
+  const warn=document.getElementById('warn');
+  if(t.semAliq.length){warn.style.display='block';warn.textContent='⚠ UFs sem alíquota cadastrada (ICMS ST não calculado): '+t.semAliq.join(', ')+'. Preencha e recalcule.';}
+  else warn.style.display='none';
+  const tb=document.querySelector('#uftable tbody'); tb.innerHTML='';
+  Object.values(res.byUF).sort((a,b)=>b.icmsST-a.icmsST).forEach(b=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${b.uf}</td><td>${b.rate!=null?b.rate.toLocaleString('pt-BR')+'%':'<span class=pill>—</span>'}</td>`+
+      `<td>${b.notas}</td><td>${money(b.base)}</td><td>${money(b.icmsN)}</td><td>${money(b.icmsST)}</td><td>${money(b.icmsTotal)}</td>`;
+    tb.appendChild(tr);
+  });
+  document.querySelector('#uftable tfoot').innerHTML=
+    `<tr><td>TOTAL</td><td></td><td>${t.comDifal+t.semDifal}</td><td>${money(t.base)}</td><td>${money(t.icmsN)}</td><td>${money(t.icmsST)}</td><td>${money(t.icmsTotal)}</td></tr>`;
+  document.getElementById('results').classList.remove('hidden');
+  const top=Object.values(res.byUF).sort((a,b)=>b.icmsST-a.icmsST).slice(0,10)
+    .map(b=>`<span class=&quot;hi&quot;>${b.uf}</span> ${money(b.icmsST)}`).join('<span class=&quot;sp&quot;>•</span>');
+  document.getElementById('ticker').innerHTML=
+    `<span class=&quot;hi&quot;>ICMS ST / DIFAL TOTAL: ${money(t.icmsST)}</span><span class=&quot;sp&quot;>•</span>ICMS Total: ${money(t.icmsTotal)}<span class=&quot;sp&quot;>•</span>${top}<span class=&quot;sp&quot;>•</span>`;
+  document.getElementById('tkwrap').classList.remove('hidden');
+}
+
+/* ---------- Gerar xlsx ---------- */
+function buildOutput(res){
+  const out=XLSX.utils.aoa_to_sheet(res.rows,{cellDates:false});
+  const m='#,##0.00', pctf='0.00&quot;%&quot;';
+  const range=XLSX.utils.decode_range(out['!ref']);
+  for(let R=1;R<=range.e.r;R++){
+    [7,8,9,10,11,12,13,14,15,16,17,18,19].forEach(C=>{const a=XLSX.utils.encode_cell({r:R,c:C});if(out[a]&amp;&amp;typeof out[a].v==='number')out[a].z=m;});
+    const u=XLSX.utils.encode_cell({r:R,c:20});if(out[u]&amp;&amp;typeof out[u].v==='number')out[u].z=pctf;
+  }
+  out['!cols']=[{wch:38},{wch:10},{wch:28},{wch:6},{wch:12},{wch:24},{wch:16},{wch:12},{wch:9},{wch:9},{wch:8},{wch:12},{wch:12},{wch:11},{wch:9},{wch:9},{wch:12},{wch:10},{wch:12},{wch:13},{wch:14}];
+  const nwb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(nwb,out,sheetName||'Fechamento');
+  processed.outWb=nwb;
+}
+document.getElementById('download').addEventListener('click',()=>{
+  if(!processed||!processed.outWb)return;
+  XLSX.writeFile(processed.outWb, fileBase+'_DIFAL_preenchido.xlsx');
+});
+</script>
+</body>
+</html>
+"></iframe>
 </div>
 
 <script>
@@ -582,6 +967,12 @@ function baixarApp(){
   URL.revokeObjectURL(a.href);
 }
 
+function mostrarView(v){
+  document.getElementById('view-conc').style.display = v === 'conc' ? '' : 'none';
+  document.getElementById('view-difal').style.display = v === 'difal' ? '' : 'none';
+  document.getElementById('tabConc').className = 'topbtn' + (v === 'conc' ? ' on' : '');
+  document.getElementById('tabDifal').className = 'topbtn' + (v === 'difal' ? ' on' : '');
+}
 if (LINK){ document.getElementById('linkInp').value = LINK; conectar(false); }
 </script>
 </body>
