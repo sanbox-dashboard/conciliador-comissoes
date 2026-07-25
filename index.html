@@ -85,6 +85,11 @@
     <div class="tabs hidden" id="canalTabs" style="margin-top:12px"></div>
     <div class="tbl hidden" id="regrasBox" style="max-height:240px"><table id="regrasTbl"></table></div>
     <div class="rules">Configuração (uma vez só): <b>Google Sheets</b> → Compartilhar → Acesso geral: "Qualquer pessoa com o link" (Leitor) → Copiar link · <b>OneDrive</b> → botão direito no arquivo → Compartilhar → "Qualquer pessoa com o link pode exibir" → Copiar link. As abas da planilha precisam se chamar <b>Amazon</b>, <b>Casas Bahia</b> e <b>Magazine Luiza</b> (colunas SKU | Comissão | Inicio | Fim). Para o Casas Bahia, a aba <b>Pedidos Casas Bahia</b> (colunas DATA | Pedido | SKU) traduz o nº do pedido do repasse no seu SKU real. O app relê a planilha toda vez que é aberto. <span style="color:#999">Sem link? <a href="#" onclick="document.getElementById('fCom').click();return false">carregar o arquivo manualmente</a>.</span><input type="file" id="fCom" accept=".xlsx,.xls"></div>
+    <div class="row" id="hookRow" style="margin-top:6px">
+      <input type="url" id="hookInp" placeholder="Link do webhook (Apps Script) — salva os resultados no Google Sheets automaticamente">
+      <button class="sec" onclick="salvarHook()">Salvar webhook</button>
+      <span id="hookStatus" style="font-size:12px;color:#888"></span>
+    </div>
     <div class="msg" id="msgCom"></div>
   </div>
 
@@ -1155,9 +1160,11 @@ async function carregarGoogle(id){
 }
 
 // ---------- UI ----------
-let RULES = null, repWB = null, repRows = [], res = null, canalDetectado = '', repFormato = 'KONCILI', LINK = '';
+let RULES = null, repWB = null, repRows = [], res = null, canalDetectado = '', repFormato = 'KONCILI', LINK = '', WEBHOOK = '';
 try { LINK = localStorage.getItem('comissoes_link') || ''; } catch(e){}
 if (!LINK && EMBED.link) LINK = EMBED.link;
+try { WEBHOOK = localStorage.getItem('comissoes_webhook') || ''; } catch(e){}
+if (!WEBHOOK && EMBED.webhook) WEBHOOK = EMBED.webhook;
 
 function setMsg(id, cls, txt){ const m = document.getElementById(id); m.className = 'msg' + (cls ? ' ' + cls : ''); m.textContent = txt || ''; }
 
@@ -1278,6 +1285,7 @@ function rodar(){
   document.getElementById('kImp').textContent = 'R$ ' + fmt(impMais);
   document.getElementById('resultado').classList.remove('hidden');
   verAba('M');
+  if (WEBHOOK && res.total) salvarSheets(res);
   setMsg('msg','ok', res.total ? `Conciliação ${canal}: ${res.mais.length} cobrado(s) a mais e ${res.menos.length} a menos, em ${res.total} pedido(s) no período.`
     : `Nenhum pedido de ${canal} caiu dentro dos períodos negociados — confira as datas na planilha online.`);
 }
@@ -1326,10 +1334,38 @@ function exportar(){
   document.getElementById('expInfo').textContent = 'Arquivo gerado: ' + nome;
 }
 
+const r2 = x => Math.round((+x || 0) * 100) / 100;
+function payloadDe(res){
+  const lin = [];
+  res.mais.forEach(d => lin.push(['Cobrado a mais', d.linha, d.pedido, d.sku, fmtD(d.data), r2(d.bruto), r2(d.com), r2(d.pct), r2(d.neg*100), r2(d.difAbs)]));
+  res.menos.forEach(d => lin.push(['Cobrado a menos', d.linha, d.pedido, d.sku, fmtD(d.data), r2(d.bruto), r2(d.com), r2(d.pct), r2(d.neg*100), r2(d.difAbs)]));
+  return {
+    geradoEm: new Date().toLocaleString('pt-BR'),
+    canal: res.canal,
+    resumo: { total: res.total, ok: res.ok.length, mais: res.mais.length, menos: res.menos.length, dev: res.dev.length,
+      impMais: r2(res.mais.reduce((s,d)=>s+d.difAbs,0)), impMenos: r2(res.menos.reduce((s,d)=>s+d.difAbs,0)) },
+    linhas: lin
+  };
+}
+function salvarSheets(res){
+  if (!WEBHOOK){ return; }
+  const st = document.getElementById('hookStatus');
+  if (st){ st.textContent = '💾 Salvando no Google Sheets…'; st.style.color = '#888'; }
+  fetch(WEBHOOK, { method:'POST', mode:'no-cors', headers:{ 'Content-Type':'text/plain;charset=utf-8' }, body: JSON.stringify(payloadDe(res)) })
+    .then(() => { if (st){ st.textContent = '✅ Enviado ao Google Sheets (' + res.canal + ' · ' + new Date().toLocaleTimeString('pt-BR').slice(0,5) + ')'; st.style.color = '#1e7e34'; } })
+    .catch(e => { if (st){ st.textContent = '⚠️ Não consegui salvar: ' + e.message; st.style.color = '#C00000'; } });
+}
+function salvarHook(){
+  const v = document.getElementById('hookInp').value.trim();
+  WEBHOOK = v;
+  try { localStorage.setItem('comissoes_webhook', v); } catch(e){}
+  const st = document.getElementById('hookStatus');
+  if (st){ st.textContent = v ? '✅ Webhook salvo — os próximos resultados vão direto para o Google Sheets.' : 'Webhook removido.'; st.style.color = v ? '#1e7e34' : '#888'; }
+}
 function baixarApp(){
   const html = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
   const marcado = html.replace(/\/\*__CFG_START__\*\/[\s\S]*?\/\*__CFG_END__\*\//,
-    '/*__CFG_START__*/' + JSON.stringify({ link: LINK }) + '/*__CFG_END__*/');
+    '/*__CFG_START__*/' + JSON.stringify({ link: LINK, webhook: WEBHOOK }) + '/*__CFG_END__*/');
   const blob = new Blob([marcado], { type:'text/html' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -1346,6 +1382,7 @@ function mostrarView(v){
     document.getElementById(tabs[k]).className = 'topbtn' + (k === v ? ' on' : '');
   }
 }
+if (WEBHOOK) document.getElementById('hookInp').value = WEBHOOK;
 if (LINK){ document.getElementById('linkInp').value = LINK; conectar(false); }
 </script>
 </body>
