@@ -88,6 +88,8 @@
     <div class="row" id="hookRow" style="margin-top:6px">
       <input type="url" id="hookInp" placeholder="Link do webhook (Apps Script) — salva os resultados no Google Sheets automaticamente">
       <button class="sec" onclick="salvarHook()">Salvar webhook</button>
+      <button class="sec" onclick="testarHook()">Testar</button>
+      <a class="sec" href="https://docs.google.com/spreadsheets/d/1PnY48rqw9ACYKUGQ2V_1SGMVcCE-97BiOaFEJlQP5bo/edit" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block">📊 Abrir planilha de resultados</a>
       <span id="hookStatus" style="font-size:12px;color:#888"></span>
     </div>
     <div class="msg" id="msgCom"></div>
@@ -617,8 +619,6 @@ document.getElementById('download').addEventListener('click',()=>{
           <th class=&quot;c&quot;>UF</th>
           <th>Estado</th>
           <th>Origem</th>
-          <th class=&quot;c&quot;>Leitura</th>
-          <th class=&quot;c&quot;></th>
         </tr></thead>
         <tbody></tbody>
       </table>
@@ -775,13 +775,10 @@ function render(){
       <td class=&quot;num editable&quot; data-k=&quot;total&quot; contenteditable>${r.total==null?'':Number(r.total).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
       <td class=&quot;c editable&quot; data-k=&quot;uf&quot; contenteditable>${r.uf||''}</td>
       <td class=&quot;editable&quot; data-k=&quot;nome&quot; contenteditable>${r.uf?(UFNAME[r.uf]||''):''}</td>
-      <td class=&quot;editable&quot; data-k=&quot;origem&quot; contenteditable>${r.origem||'Mercado Livre'}</td>
-      <td class=&quot;c&quot;><span class=&quot;tag ${r.warn?'w':'o'}&quot;>${r.source}</span></td>
-      <td class=&quot;c&quot;><button class=&quot;del&quot; title=&quot;remover&quot;>×</button></td>`;
+      <td class=&quot;editable&quot; data-k=&quot;origem&quot; contenteditable>${r.origem||'Mercado Livre'}</td>`;
     tr.querySelectorAll('.editable').forEach(td=>{
       td.addEventListener('blur',()=>editCell(idx,td.dataset.k,td.textContent.trim()));
     });
-    tr.querySelector('.del').addEventListener('click',()=>{ROWS.splice(idx,1);render();});
     tb.appendChild(tr);
   });
   $('#grandTotal').textContent=money(sum);
@@ -884,7 +881,8 @@ loadUrl();
 const TOL = 0.01;
 const CANAIS = ['Amazon', 'Casas Bahia', 'Magazine Luiza'];
 const ALIAS = { 'Magazine Luiza': ['magalu'], 'Casas Bahia': ['via varejo', 'viavarejo', 'casasbahia'] };
-const EMBED = /*__CFG_START__*/{"link":"https://docs.google.com/spreadsheets/d/1bDkFVZLH2vDDWEgmEtdcEKyyKbn5_S94MVpf2e5HTJc/edit"}/*__CFG_END__*/;
+const EMBED = /*__CFG_START__*/{"link":"https://docs.google.com/spreadsheets/d/1bDkFVZLH2vDDWEgmEtdcEKyyKbn5_S94MVpf2e5HTJc/edit","webhook":"https://script.google.com/macros/s/AKfycbyLpWFLa1Zm3mTAYdCqEeok2_Qk0VsULnETb1lTH-3yiyEwiVhmS7qyPL6HqR5zaeF1Sw/exec"}/*__CFG_END__*/;
+const RESULTS_URL = "https://docs.google.com/spreadsheets/d/1PnY48rqw9ACYKUGQ2V_1SGMVcCE-97BiOaFEJlQP5bo/edit";
 const MAP_TAB_CB = 'Pedidos Casas Bahia';   // aba de-para: DATA | Pedido | SKU
 let MAP_CB = {};                            // { pedido normalizado -> SKU real }
 const normPed = v => String(v == null ? '' : v).trim().replace(/\.0+$/, '');
@@ -1285,7 +1283,7 @@ function rodar(){
   document.getElementById('kImp').textContent = 'R$ ' + fmt(impMais);
   document.getElementById('resultado').classList.remove('hidden');
   verAba('M');
-  if (WEBHOOK && res.total) salvarSheets(res);
+  if (res.total && getHook()) salvarSheets(res);
   setMsg('msg','ok', res.total ? `Conciliação ${canal}: ${res.mais.length} cobrado(s) a mais e ${res.menos.length} a menos, em ${res.total} pedido(s) no período.`
     : `Nenhum pedido de ${canal} caiu dentro dos períodos negociados — confira as datas na planilha online.`);
 }
@@ -1347,13 +1345,29 @@ function payloadDe(res){
     linhas: lin
   };
 }
-function salvarSheets(res){
-  if (!WEBHOOK){ return; }
+function getHook(){
+  const f = document.getElementById('hookInp');
+  const v = (f && f.value ? f.value.trim() : '') || WEBHOOK;
+  if (v && v !== WEBHOOK){ WEBHOOK = v; try { localStorage.setItem('comissoes_webhook', v); } catch(e){} }
+  return WEBHOOK;
+}
+function enviarSheets(payload, msgOk){
+  const hook = getHook();
   const st = document.getElementById('hookStatus');
-  if (st){ st.textContent = '💾 Salvando no Google Sheets…'; st.style.color = '#888'; }
-  fetch(WEBHOOK, { method:'POST', mode:'no-cors', headers:{ 'Content-Type':'text/plain;charset=utf-8' }, body: JSON.stringify(payloadDe(res)) })
-    .then(() => { if (st){ st.textContent = '✅ Enviado ao Google Sheets (' + res.canal + ' · ' + new Date().toLocaleTimeString('pt-BR').slice(0,5) + ')'; st.style.color = '#1e7e34'; } })
-    .catch(e => { if (st){ st.textContent = '⚠️ Não consegui salvar: ' + e.message; st.style.color = '#C00000'; } });
+  if (!hook){ if (st){ st.textContent = '⚠️ Cole o link do webhook e clique em Salvar webhook.'; st.style.color = '#C00000'; } return; }
+  if (st){ st.textContent = '💾 Enviando ao Google Sheets…'; st.style.color = '#888'; }
+  fetch(hook, { method:'POST', mode:'no-cors', headers:{ 'Content-Type':'text/plain;charset=utf-8' }, body: JSON.stringify(payload) })
+    .then(() => { if (st){ st.textContent = msgOk; st.style.color = '#1e7e34'; } })
+    .catch(e => { if (st){ st.textContent = '⚠️ Falha ao enviar: ' + e.message + ' — confira se a implantação está como "Qualquer pessoa".'; st.style.color = '#C00000'; } });
+}
+function salvarSheets(res){
+  enviarSheets(payloadDe(res), '✅ Enviado ao Google Sheets (' + res.canal + ' · ' + new Date().toLocaleTimeString('pt-BR').slice(0,5) + '). Confira na planilha.');
+}
+function testarHook(){
+  enviarSheets({ geradoEm: new Date().toLocaleString('pt-BR'), canal: 'TESTE',
+    resumo: { total:1, ok:1, mais:0, menos:0, dev:0, impMais:0, impMenos:0 },
+    linhas: [['Cobrado a mais', 0, 'TESTE-PEDIDO', 'SKU-TESTE', new Date().toLocaleDateString('pt-BR'), 100, 10, 10, 10, 0]] },
+    '✅ Teste enviado — veja se apareceu uma linha "TESTE" na planilha de resultados.');
 }
 function salvarHook(){
   const v = document.getElementById('hookInp').value.trim();
