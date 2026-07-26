@@ -65,6 +65,7 @@
   <button class="topbtn on" id="tabConc" onclick="mostrarView('conc')">Conciliador de Comissões</button>
   <button class="topbtn" id="tabDifal" onclick="mostrarView('difal')">Conferência DIFAL</button>
   <button class="topbtn" id="tabDifal2" onclick="mostrarView('difal2')">Arquivo DIFAL</button>
+  <a class="topbtn" id="btnResultados" href="https://docs.google.com/spreadsheets/d/1PnY48rqw9ACYKUGQ2V_1SGMVcCE-97BiOaFEJlQP5bo/edit?gid=907230061#gid=907230061" target="_blank" rel="noopener" style="margin-left:auto;color:var(--verde);text-decoration:none">📊 Planilha de resultados ↗</a>
 </div>
 <div id="view-conc">
 <div class="wrap">
@@ -89,7 +90,7 @@
       <input type="url" id="hookInp" placeholder="Link do webhook (Apps Script) — salva os resultados no Google Sheets automaticamente">
       <button class="sec" onclick="salvarHook()">Salvar webhook</button>
       <button class="sec" onclick="testarHook()">Testar</button>
-      <a class="sec" href="https://docs.google.com/spreadsheets/d/1PnY48rqw9ACYKUGQ2V_1SGMVcCE-97BiOaFEJlQP5bo/edit" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block">📊 Abrir planilha de resultados</a>
+      <a class="sec" href="https://docs.google.com/spreadsheets/d/1PnY48rqw9ACYKUGQ2V_1SGMVcCE-97BiOaFEJlQP5bo/edit?gid=907230061#gid=907230061" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block">📊 Abrir planilha de resultados</a>
       <span id="hookStatus" style="font-size:12px;color:#888"></span>
     </div>
     <div class="msg" id="msgCom"></div>
@@ -882,7 +883,7 @@ const TOL = 0.01;
 const CANAIS = ['Amazon', 'Casas Bahia', 'Magazine Luiza'];
 const ALIAS = { 'Magazine Luiza': ['magalu'], 'Casas Bahia': ['via varejo', 'viavarejo', 'casasbahia'] };
 const EMBED = /*__CFG_START__*/{"link":"https://docs.google.com/spreadsheets/d/1bDkFVZLH2vDDWEgmEtdcEKyyKbn5_S94MVpf2e5HTJc/edit","webhook":"https://script.google.com/macros/s/AKfycbyLpWFLa1Zm3mTAYdCqEeok2_Qk0VsULnETb1lTH-3yiyEwiVhmS7qyPL6HqR5zaeF1Sw/exec"}/*__CFG_END__*/;
-const RESULTS_URL = "https://docs.google.com/spreadsheets/d/1PnY48rqw9ACYKUGQ2V_1SGMVcCE-97BiOaFEJlQP5bo/edit";
+const RESULTS_URL = "https://docs.google.com/spreadsheets/d/1PnY48rqw9ACYKUGQ2V_1SGMVcCE-97BiOaFEJlQP5bo/edit?gid=907230061#gid=907230061";
 const MAP_TAB_CB = 'Pedidos Casas Bahia';   // aba de-para: DATA | Pedido | SKU
 let MAP_CB = {};                            // { pedido normalizado -> SKU real }
 const normPed = v => String(v == null ? '' : v).trim().replace(/\.0+$/, '');
