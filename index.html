@@ -299,8 +299,7 @@ tfoot td:first-child{text-align:left;}
           <label for=&quot;zero&quot;>Zerar ICMS ST em devoluções e vendas internas (destino = origem)</label>
         </div>
         <p class=&quot;formula&quot;>
-          <code>ICMS ST = Base ICMS × alíq. destino − ICMS</code> · valores negativos zerados ·
-          <code>ICMS Total = ICMS + ICMS ST</code>
+          <b>Base dupla (por dentro):</b> <code>Base dupla = (Base ICMS − ICMS) ÷ (1 − alíq. destino)</code> · <code>DIFAL = Base dupla × alíq. destino − ICMS</code> · negativos zerados · <code>ICMS Total = ICMS + DIFAL</code>
         </p>
       </div>
       <div class=&quot;card&quot;>
@@ -436,7 +435,7 @@ function processRows(rows, opts){
     let q=0,pct=null;
     const noDifal=isDev||intra;
     const applies = zeroNoDifal ? (rate!=null &amp;&amp; !noDifal) : (rate!=null);
-    if(applies){const q0=round2(base*rate/100-icms); q=q0<0?0:q0; pct=rate;}
+    if(applies){const den=1-rate/100; const baseDupla=den>0?(base-icms)/den:base; const q0=round2(baseDupla*rate/100-icms); q=q0<0?0:q0; pct=rate;}
     if(!noDifal &amp;&amp; rate==null) totals.semAliq.add(uf);
     const icmsTotal=round2(icms+q);
     r[16]=q; r[NEW1]=icmsTotal; r[NEW2]=pct;
@@ -1090,9 +1089,11 @@ function regrasDeGviz(resp){
   const lista = [];
   const parseGD = c => {
     if (!c) return null;
-    if (c.f){ const d = parseData(c.f); if (d) return d; }
+    // usar SEMPRE o valor real do gviz (Date(ano,mes,dia)) primeiro — o texto
+    // formatado ("16/jun.") faz o motor do navegador entender ano 2001.
     const m = String(c.v || '').match(/Date\((\d+),(\d+),(\d+)/);
     if (m) return new Date(+m[1], +m[2], +m[3]);
+    if (c.f){ const d = parseData(c.f); if (d) return d; }
     return parseData(c.v);
   };
   const rows = (resp.table && resp.table.rows) || [];
