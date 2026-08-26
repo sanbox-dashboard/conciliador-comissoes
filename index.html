@@ -418,10 +418,11 @@ function loadFile(file){
 function processRows(rows, opts){
   const origin=opts.origin, rates=opts.rates, zeroNoDifal=opts.zeroNoDifal;
   let hIdx=rows.findIndex(r=>r &amp;&amp; r[12]==='Base ICMS'); if(hIdx<0)hIdx=0;
-  const NEW1=19,NEW2=20;
-  rows[hIdx][NEW1]='ICMS Total'; rows[hIdx][NEW2]='ICMS % (destino)';
+  const NEW1=19,NEW2=20,OBS=21;
+  rows[hIdx][NEW1]='ICMS Total'; rows[hIdx][NEW2]='ICMS % (destino)'; rows[hIdx][OBS]='Observação';
+  const seen=new Set();
   let cat='';
-  const totals={base:0,icmsN:0,icmsST:0,icmsTotal:0,comDifal:0,semDifal:0,semAliq:new Set()};
+  const totals={base:0,icmsN:0,icmsST:0,icmsTotal:0,comDifal:0,semDifal:0,dup:0,semAliq:new Set()};
   const byUF={};
   for(let i=hIdx+1;i<rows.length;i++){
     const r=rows[i]; if(!r)continue;
@@ -429,6 +430,9 @@ function processRows(rows, opts){
     if(A &amp;&amp; (B===null||B===undefined||B==='')){cat=String(A);continue;}
     if(B===null||B===undefined||B==='')continue;
     const isDev=/devolu/i.test(cat);
+    const numero=String(B).trim();
+    if(!isDev &amp;&amp; seen.has(numero)){ r[16]=0; r[NEW1]=''; r[NEW2]=null; r[OBS]='NF DUPLICADA - desconsiderada'; totals.dup++; continue; }
+    if(!isDev) seen.add(numero);
     const uf=(r[3]||'').toString().trim().toUpperCase();
     const base=Number(r[12])||0, icms=Number(r[13])||0, rate=rates[uf];
     const intra=uf===origin;
@@ -466,7 +470,7 @@ function renderResults(res){
   document.getElementById('k-n').textContent=money(t.icmsN);
   document.getElementById('k-st').textContent=money(t.icmsST);
   document.getElementById('k-total').textContent=money(t.icmsTotal);
-  document.getElementById('k-st-sub').textContent=t.comDifal+' notas com DIFAL';
+  document.getElementById('k-st-sub').textContent=t.comDifal+' notas com DIFAL'+(t.dup?' · '+t.dup+' NF duplicada(s) ignorada(s)':'');
   document.getElementById('kpis').classList.remove('hidden');
   const warn=document.getElementById('warn');
   if(t.semAliq.length){warn.style.display='block';warn.textContent='⚠ UFs sem alíquota cadastrada (ICMS ST não calculado): '+t.semAliq.join(', ')+'. Preencha e recalcule.';}
@@ -610,11 +614,12 @@ document.getElementById('download').addEventListener('click',()=>{
 
   <div class=&quot;card hidden&quot; id=&quot;resultCard&quot;>
     <h2>2. Confira o relatório</h2>
-    <p class=&quot;hint&quot;>Valores em <span class=&quot;tag w&quot;>amarelo</span> merecem conferência (leitura ambígua). Clique em qualquer célula para corrigir. Duplicatas de nº NF são unificadas automaticamente.</p>
+    <p class=&quot;hint&quot;>Valores em <span class=&quot;tag w&quot;>amarelo</span> merecem conferência (leitura ambígua). Clique em qualquer célula para corrigir. A data de emissão é lida do XML da NF. Duplicatas de nº NF são unificadas automaticamente e não são reenviadas ao Google Sheets.</p>
     <div style=&quot;overflow:auto;max-height:460px;border:1px solid var(--line);border-radius:10px&quot;>
       <table id=&quot;tbl&quot;>
         <thead><tr>
           <th class=&quot;c&quot;>nº NF</th>
+          <th class=&quot;c&quot;>Data emissão</th>
           <th class=&quot;num&quot;>Total a Recolher</th>
           <th class=&quot;c&quot;>UF</th>
           <th>Estado</th>
@@ -673,7 +678,9 @@ function parseXml(text){
     let uf=null;
     const dest=doc.getElementsByTagName('dest')[0];
     if(dest){const u=dest.getElementsByTagName('UF');if(u.length)uf=u[0].textContent.trim();}
-    return {nf:nNF?parseInt(nNF,10):null, uf};
+    let data=null; const dh=g('dhEmi')||g('dEmi');
+    if(dh){const m=String(dh).match(/(\d{4})-(\d{2})-(\d{2})/);if(m)data=m[3]+'/'+m[2]+'/'+m[1];}
+    return {nf:nNF?parseInt(nNF,10):null, uf, data};
   }catch(e){return {nf:null,uf:null};}
 }
 
@@ -734,8 +741,8 @@ async function ingest(fileList){
     const guia=files.find(f=>/^guia/i.test(f.name)&amp;&amp;/\.pdf$/i.test(f.name));
     done++; prog.style.width=Math.round(done/dirs.length*100)+'%';
     if(!guia){ if(xml)log('· sem guia de pagamento: '+dir.split('/').pop()); continue; }
-    let nf=null,uf=null;
-    if(xml){ const x=parseXml(await xml.text()); nf=x.nf; uf=x.uf; }
+    let nf=null,uf=null,data=null;
+    if(xml){ const x=parseXml(await xml.text()); nf=x.nf; uf=x.uf; data=x.data; }
     // fallback NF pela chave no nome da pasta
     if(!nf){ const km=dir.match(/(\d{44})/); if(km)nf=parseInt(nfFromKey(km[1]),10); }
     if(!uf)uf=fnameUf(guia.name);
@@ -749,7 +756,7 @@ async function ingest(fileList){
     else if(fnv==null&amp;&amp;pdfv!=null){source='pdf';}
     else if(fnv==null&amp;&amp;pdfv==null){warn=true;source='?';}
     if(!uf){warn=true;}
-    upsert({nf,total,uf,source,warn,origem:'Mercado Livre'});
+    upsert({nf,total,uf,data,source,warn,origem:'Mercado Livre'});
     added++;
   }
   log('✔ '+added+' guia(s) processada(s).');
@@ -772,6 +779,7 @@ function render(){
     const tr=document.createElement('tr'); if(r.warn)tr.className='warn';
     tr.innerHTML=`
       <td class=&quot;c editable&quot; data-k=&quot;nf&quot; contenteditable>${r.nf??''}</td>
+      <td class=&quot;c editable&quot; data-k=&quot;data&quot; contenteditable>${r.data||''}</td>
       <td class=&quot;num editable&quot; data-k=&quot;total&quot; contenteditable>${r.total==null?'':Number(r.total).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
       <td class=&quot;c editable&quot; data-k=&quot;uf&quot; contenteditable>${r.uf||''}</td>
       <td class=&quot;editable&quot; data-k=&quot;nome&quot; contenteditable>${r.uf?(UFNAME[r.uf]||''):''}</td>
@@ -788,6 +796,7 @@ function render(){
 function editCell(idx,k,val){
   const r=ROWS[idx];
   if(k==='nf')r.nf=val?parseInt(val.replace(/\D/g,''),10):null;
+  else if(k==='data')r.data=val||null;
   else if(k==='total'){const n=parseFloat(val.replace(/[^\d,.-]/g,'').replace(/\./g,'').replace(',','.'));r.total=isNaN(n)?null:n;r.warn=false;r.source='manual';}
   else if(k==='uf'){const u=val.slice(0,2).toUpperCase();if(/^[A-Z]{2}$/.test(u)){r.uf=u;delete r.nomeManual;}}
   else if(k==='nome'){r.nomeManual=val;UFNAME[r.uf]=val;}
@@ -796,21 +805,21 @@ function editCell(idx,k,val){
 }
 
 /* ---------- export ---------- */
-const HEAD=['nº NF','Total a Recolher','UF','Estado','Origem'];
-function rowsForExport(){return ROWS.map(r=>({'nº NF':r.nf,'Total a Recolher':r.total,'UF':r.uf||'','Estado':r.uf?(UFNAME[r.uf]||''):'','Origem':r.origem||'Mercado Livre'}));}
+const HEAD=['nº NF','Data emissão','Total a Recolher','UF','Estado','Origem'];
+function rowsForExport(){return ROWS.map(r=>({'nº NF':r.nf,'Data emissão':r.data||'','Total a Recolher':r.total,'UF':r.uf||'','Estado':r.uf?(UFNAME[r.uf]||''):'','Origem':r.origem||'Mercado Livre'}));}
 $('#dlXlsx').onclick=()=>{
   const data=rowsForExport();
   const total=ROWS.reduce((s,r)=>s+(typeof r.total==='number'?r.total:0),0);
-  data.push({'nº NF':'TOTAL','Total a Recolher':total,'UF':'','Estado':'','Origem':''});
+  data.push({'nº NF':'TOTAL','Data emissão':'','Total a Recolher':total,'UF':'','Estado':'','Origem':''});
   const ws=XLSX.utils.json_to_sheet(data,{header:HEAD});
-  ws['!cols']=[{wch:12},{wch:18},{wch:6},{wch:24},{wch:16}];
-  for(let i=2;i<=data.length+1;i++){const c=ws['B'+i];if(c&amp;&amp;typeof c.v==='number'){c.z='R$ #,##0.00';c.t='n';}}
+  ws['!cols']=[{wch:12},{wch:13},{wch:18},{wch:6},{wch:24},{wch:16}];
+  for(let i=2;i<=data.length+1;i++){const c=ws['C'+i];if(c&amp;&amp;typeof c.v==='number'){c.z='R$ #,##0.00';c.t='n';}}
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'DIFAL');
   XLSX.writeFile(wb,'Relatorio_DIFAL.xlsx');
 };
 $('#dlCsv').onclick=()=>{
   const lines=[HEAD.slice()];
-  ROWS.forEach(r=>lines.push([r.nf,(r.total??'').toString().replace('.',','),r.uf||'',r.uf?(UFNAME[r.uf]||''):'',r.origem||'Mercado Livre']));
+  ROWS.forEach(r=>lines.push([r.nf,r.data||'',(r.total??'').toString().replace('.',','),r.uf||'',r.uf?(UFNAME[r.uf]||''):'',r.origem||'Mercado Livre']));
   const csv=lines.map(l=>l.map(x=>`&quot;${String(x??'').replace(/&quot;/g,'&quot;&quot;')}&quot;`).join(';')).join('\n');
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([&quot;﻿&quot;+csv],{type:'text/csv'}));a.download='Relatorio_DIFAL.csv';a.click();
 };
@@ -822,7 +831,8 @@ function loadUrl(){try{GS_URL=localStorage.getItem('gnre_gs_url')||'';}catch(e){
 $('#saveUrl').onclick=()=>{GS_URL=$('#gsUrl').value.trim();try{localStorage.setItem('gnre_gs_url',GS_URL);}catch(e){}$('#urlState').textContent=GS_URL?'URL salva ✓':'—';};
 $('#sendGs').onclick=async()=>{
   if(!GS_URL){$('#gsCfg').open=true;$('#sendStatus').textContent='Configure primeiro a URL do Google Apps Script (seção ⚙ abaixo).';return;}
-  const payload={rows:ROWS.filter(r=>r.nf!=null).map(r=>({nf:r.nf,total:r.total,uf:r.uf||'',estado:r.uf?(UFNAME[r.uf]||''):'',origem:r.origem||'Mercado Livre'}))};
+  const vistos=new Set();
+  const payload={rows:ROWS.filter(r=>r.nf!=null&amp;&amp;!vistos.has(r.nf)&amp;&amp;vistos.add(r.nf)).map(r=>({nf:r.nf,data:r.data||'',total:r.total,uf:r.uf||'',estado:r.uf?(UFNAME[r.uf]||''):'',origem:r.origem||'Mercado Livre'}))};
   $('#sendStatus').textContent='Enviando '+payload.rows.length+' linha(s)…';
   try{
     await fetch(GS_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload)});
