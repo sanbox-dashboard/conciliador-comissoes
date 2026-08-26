@@ -521,7 +521,7 @@ if(!GS_URL_CONF)GS_URL_CONF='https://script.google.com/macros/s/AKfycbyLpWFLa1Zm
 document.getElementById('sendGs').addEventListener('click',()=>{
   if(!processed||!processed.notas||!processed.notas.length){document.getElementById('sendStatusConf').textContent='Calcule o fechamento primeiro.';return;}
   const st=document.getElementById('sendStatusConf');
-  st.textContent='Enviando '+processed.notas.length+' nota(s) — '+mesLabel+'…';
+  st.textContent='Enviando '+processed.notas.length+' nota(s)…';
   const resumoUF=Object.values(processed.byUF).sort((a,b)=>b.icmsST-a.icmsST).map(b=>({uf:b.uf,rate:b.rate,notas:b.notas,base:b.base,icmsN:b.icmsN,icmsST:b.icmsST,icmsTotal:b.icmsTotal}));
   const t=processed.totals;
   // mês de referência = mês predominante das datas de emissão (col E)
