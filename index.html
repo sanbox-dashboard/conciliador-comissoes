@@ -521,15 +521,21 @@ if(!GS_URL_CONF)GS_URL_CONF='https://script.google.com/macros/s/AKfycbyLpWFLa1Zm
 document.getElementById('sendGs').addEventListener('click',()=>{
   if(!processed||!processed.notas||!processed.notas.length){document.getElementById('sendStatusConf').textContent='Calcule o fechamento primeiro.';return;}
   const st=document.getElementById('sendStatusConf');
-  st.textContent='Enviando '+processed.notas.length+' nota(s)…';
+  st.textContent='Enviando '+processed.notas.length+' nota(s) — '+mesLabel+'…';
   const resumoUF=Object.values(processed.byUF).sort((a,b)=>b.icmsST-a.icmsST).map(b=>({uf:b.uf,rate:b.rate,notas:b.notas,base:b.base,icmsN:b.icmsN,icmsST:b.icmsST,icmsTotal:b.icmsTotal}));
   const t=processed.totals;
-  const payload={conf:true,
+  // mês de referência = mês predominante das datas de emissão (col E)
+  const cont={};
+  processed.notas.forEach(n=>{const m=String(n.data||'').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/); if(m){const k=m[3]+'-'+('0'+m[2]).slice(-2); cont[k]=(cont[k]||0)+1;}});
+  let anoMes='',best=-1; for(const k in cont){ if(cont[k]>best){best=cont[k];anoMes=k;} }
+  const MESES=['','Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  const mesLabel=anoMes?(MESES[+anoMes.slice(5,7)]+'/'+anoMes.slice(0,4)):'Sem data';
+  const payload={conf:true, anoMes:anoMes, mesLabel:mesLabel,
     rows:processed.notas.map(n=>({data:n.data||'',numero:n.numero,uf:n.uf||'',base:n.base,icms:n.icms,pct:n.pct,difal:n.difal})),
     resumoUF:resumoUF,
     totais:{base:t.base,icmsN:t.icmsN,icmsST:t.icmsST,icmsTotal:t.icmsTotal,notas:t.comDifal+t.semDifal}};
   fetch(GS_URL_CONF,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload)})
-    .then(()=>{st.textContent='✅ Enviado para a aba &quot;Conferência DIFAL&quot;. Abra a planilha para conferir.';})
+    .then(()=>{st.textContent='✅ Enviado ('+mesLabel+') para as abas de Conferência DIFAL. Abra a planilha para conferir.';})
     .catch(e=>{st.textContent='⚠️ Falha ao enviar: '+e.message;});
 });
 </script>
