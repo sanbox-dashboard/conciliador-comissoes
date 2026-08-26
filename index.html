@@ -670,6 +670,18 @@ document.getElementById('sendGs').addEventListener('click',()=>{
   </div>
 
   <div class=&quot;card&quot;>
+    <h2>3. Pagamentos do Tiny (contas a pagar)</h2>
+    <p class=&quot;hint&quot;>Suba o arquivo <b>.xls</b> de contas a pagar do Tiny (categoria Difal). O sistema lê o nº da NF no Histórico (coluna K) e o valor Pago (coluna L) para abater do DIFAL. Processado no seu navegador.</p>
+    <div class=&quot;row&quot; style=&quot;margin-top:6px&quot;>
+      <button class=&quot;btn sec&quot; id=&quot;pickTiny&quot;>Escolher arquivo do Tiny</button>
+      <span class=&quot;pill&quot; id=&quot;tinyState&quot;></span>
+      <button class=&quot;btn ok hidden&quot; id=&quot;sendTiny&quot;>⇧ Enviar pagamentos Tiny</button>
+    </div>
+    <input id=&quot;tinyInput&quot; type=&quot;file&quot; accept=&quot;.xls,.xlsx&quot; multiple class=&quot;hidden&quot;>
+    <div class=&quot;status&quot; id=&quot;tinyStatus&quot;></div>
+  </div>
+
+  <div class=&quot;card&quot;>
     <details id=&quot;gsCfg&quot;>
       <summary>⚙ Configurar o Google Sheets ao vivo (fazer uma vez)</summary>
       <p class=&quot;hint&quot; style=&quot;margin-top:12px&quot;>Cole aqui a URL do seu Web App do Google Apps Script (as instruções vieram junto na entrega). Ela fica salva só neste arquivo, no seu navegador.</p>
@@ -910,6 +922,53 @@ async function handleZip(file){
 $('#clearAll').onclick=()=>{ROWS=[];render();logEl.textContent='';$('#sendStatus').textContent='';$('#resultCard').classList.add('hidden');};
 loadUrl();
 
+
+/* ---------- Pagamentos do Tiny ---------- */
+let TINY=[];
+$('#pickTiny').onclick=()=>$('#tinyInput').click();
+$('#tinyInput').onchange=async e=>{
+  const files=[...e.target.files]; if(!files.length)return;
+  const map={};
+  for(const f of files){
+    try{
+      const buf=await f.arrayBuffer();
+      const wb=XLSX.read(new Uint8Array(buf),{type:'array'});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null});
+      let hi=-1,pi=-1,hdr=0;
+      for(let i=0;i<Math.min(rows.length,12);i++){
+        const r=rows[i]||[];
+        const ih=r.findIndex(c=>/hist[oó]rico/i.test(String(c)));
+        const ip=r.findIndex(c=>/^\s*pago\s*$/i.test(String(c)));
+        if(ih>=0&amp;&amp;ip>=0){hi=ih;pi=ip;hdr=i;break;}
+      }
+      if(hi<0){hi=10;pi=11;}
+      for(let i=hdr+1;i<rows.length;i++){
+        const r=rows[i]; if(!r)continue;
+        const m=String(r[hi]||'').match(/NF\s*([0-9]+)/i); if(!m)continue;
+        const nf=parseInt(m[1],10);
+        let pago=r[pi];
+        if(typeof pago!=='number') pago=parseFloat(String(pago||'').replace(/[^\d,.-]/g,'').replace(/\./g,'').replace(',','.'));
+        pago=isNaN(pago)?0:pago;
+        map[nf]=(map[nf]||0)+pago;
+      }
+    }catch(err){$('#tinyStatus').textContent='Erro ao ler '+f.name+': '+err.message;}
+  }
+  TINY=Object.keys(map).map(nf=>({nf:parseInt(nf,10),pago:Math.round(map[nf]*100)/100}));
+  const tot=TINY.reduce((s,x)=>s+x.pago,0);
+  $('#tinyState').textContent=TINY.length+' NF(s) · R$ '+tot.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+  $('#tinyStatus').textContent=TINY.length?'Pronto para enviar.':'Nenhuma NF encontrada no Histórico.';
+  document.getElementById('sendTiny').classList.toggle('hidden',!TINY.length);
+};
+$('#sendTiny').onclick=async()=>{
+  if(!GS_URL){$('#gsCfg').open=true;$('#tinyStatus').textContent='Configure primeiro a URL do Google Apps Script (seção ⚙ abaixo).';return;}
+  if(!TINY.length){$('#tinyStatus').textContent='Suba o arquivo do Tiny primeiro.';return;}
+  $('#tinyStatus').textContent='Enviando '+TINY.length+' pagamento(s)…';
+  try{
+    await fetch(GS_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({tiny:true,rows:TINY})});
+    $('#tinyStatus').textContent='✅ Pagamentos Tiny enviados. Veja a coluna &quot;Pago Tiny&quot; nas abas de Conferência DIFAL.';
+  }catch(e){$('#tinyStatus').textContent='⚠️ Falha ao enviar: '+e.message;}
+};
 </script>
 </body>
 </html>"></iframe>
