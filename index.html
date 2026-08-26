@@ -314,6 +314,8 @@ tfoot td:first-child{text-align:left;}
     <div class=&quot;card actions&quot;>
       <button class=&quot;btn btn-primary&quot; id=&quot;process&quot; disabled>Calcular fechamento</button>
       <button class=&quot;btn btn-dl hidden&quot; id=&quot;download&quot;>↓ Baixar planilha (.xlsx)</button>
+      <button class=&quot;btn hidden&quot; id=&quot;sendGs&quot; style=&quot;background:#16A34A;color:#fff;border-color:#16A34A&quot;>⇧ Enviar para Google Sheets</button>
+      <span class=&quot;status&quot; id=&quot;sendStatusConf&quot;></span>
       <span class=&quot;status&quot; id=&quot;status&quot;>Aguardando arquivo…</span>
     </div>
     <div class=&quot;warn&quot; id=&quot;warn&quot;></div>
@@ -424,6 +426,7 @@ function processRows(rows, opts){
   let cat='';
   const totals={base:0,icmsN:0,icmsST:0,icmsTotal:0,comDifal:0,semDifal:0,dup:0,semAliq:new Set()};
   const byUF={};
+  const notasOut=[];
   for(let i=hIdx+1;i<rows.length;i++){
     const r=rows[i]; if(!r)continue;
     const A=r[0],B=r[1];
@@ -443,6 +446,7 @@ function processRows(rows, opts){
     if(!noDifal &amp;&amp; rate==null) totals.semAliq.add(uf);
     const icmsTotal=round2(icms+q);
     r[16]=q; r[NEW1]=icmsTotal; r[NEW2]=pct;
+    if(!isDev) notasOut.push({data:r[4]||'', numero:String(B), uf, base, icms, pct, difal:q});
     totals.base+=base; totals.icmsN+=icms; totals.icmsST+=q; totals.icmsTotal+=icmsTotal;
     if(q>0)totals.comDifal++; else totals.semDifal++;
     if(!byUF[uf])byUF[uf]={uf,base:0,icmsN:0,icmsST:0,icmsTotal:0,notas:0,rate:rate??null};
@@ -450,7 +454,7 @@ function processRows(rows, opts){
   }
   ['base','icmsN','icmsST','icmsTotal'].forEach(k=>totals[k]=round2(totals[k]));
   totals.semAliq=[...totals.semAliq];
-  return {rows,totals,byUF,headerIdx:hIdx};
+  return {rows,totals,byUF,headerIdx:hIdx,notas:notasOut};
 }
 
 /* ---------- Executar ---------- */
@@ -461,6 +465,7 @@ document.getElementById('process').addEventListener('click',()=>{
   const res=processRows(rows,{origin:originSel.value,rates:currentRates(),zeroNoDifal:document.getElementById('zero').checked});
   processed=res; renderResults(res); buildOutput(res);
   document.getElementById('download').classList.remove('hidden');
+  document.getElementById('sendGs').classList.remove('hidden');
   document.getElementById('status').textContent='Cálculo concluído.';
 });
 
@@ -509,6 +514,18 @@ function buildOutput(res){
 document.getElementById('download').addEventListener('click',()=>{
   if(!processed||!processed.outWb)return;
   XLSX.writeFile(processed.outWb, fileBase+'_DIFAL_preenchido.xlsx');
+});
+let GS_URL_CONF='';
+try{GS_URL_CONF=localStorage.getItem('confdifal_gs_url')||'';}catch(e){}
+if(!GS_URL_CONF)GS_URL_CONF='https://script.google.com/macros/s/AKfycbyLpWFLa1Zm3mTAYdCqEeok2_Qk0VsULnETb1lTH-3yiyEwiVhmS7qyPL6HqR5zaeF1Sw/exec';
+document.getElementById('sendGs').addEventListener('click',()=>{
+  if(!processed||!processed.notas||!processed.notas.length){document.getElementById('sendStatusConf').textContent='Calcule o fechamento primeiro.';return;}
+  const st=document.getElementById('sendStatusConf');
+  st.textContent='Enviando '+processed.notas.length+' nota(s)…';
+  const payload={conf:true, rows:processed.notas.map(n=>({data:n.data||'',numero:n.numero,uf:n.uf||'',base:n.base,icms:n.icms,pct:n.pct,difal:n.difal}))};
+  fetch(GS_URL_CONF,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload)})
+    .then(()=>{st.textContent='✅ Enviado para a aba &quot;Conferência DIFAL&quot;. Abra a planilha para conferir.';})
+    .catch(e=>{st.textContent='⚠️ Falha ao enviar: '+e.message;});
 });
 </script>
 </body>
